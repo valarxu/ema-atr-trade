@@ -52,17 +52,19 @@ async function fetchKlines() {
 
 // 计算EMA
 function calculateEMA(data, period) {
-    const multiplier = 2 / (period + 1);
-    const ema = [];
+    // 确保只使用最后period根K线的数据
+    const relevantData = data.slice(-period);
     
-    // 计算初始SMA（前period个数据）
-    const sma = data.slice(0, period).reduce((sum, val) => sum + val, 0) / period;
-    ema.push(sma);
-
-    // 计算后续EMA
-    for (let i = period; i < data.length; i++) {
-        const currentEMA = (data[i] - ema[i - period]) * multiplier + ema[i - period];
-        ema.push(currentEMA);
+    // 计算简单移动平均线 (SMA) 作为首个EMA值
+    const sma = relevantData.reduce((sum, val) => sum + val, 0) / period;
+    
+    // 由于我们只需要最终的EMA值，可以简化计算
+    let ema = sma;
+    const multiplier = 2 / (period + 1);
+    
+    // 只计算最后一个EMA值
+    for (let i = 0; i < relevantData.length; i++) {
+        ema = (relevantData[i] - ema) * multiplier + ema;
     }
     
     return ema;
@@ -70,32 +72,25 @@ function calculateEMA(data, period) {
 
 // 计算ATR
 function calculateATR(highs, lows, closingPrices, period) {
+    // 确保只使用最后 period+1 根K线的数据（需要多一根用于计算第一个TR值）
+    const relevantHighs = highs.slice(-(period + 1));
+    const relevantLows = lows.slice(-(period + 1));
+    const relevantClosing = closingPrices.slice(-(period + 1));
+    
     const tr = [];
     
     // 计算TR值
-    for (let i = 0; i < highs.length; i++) {
-        if (i === 0) {
-            tr.push(highs[i] - lows[i]);
-        } else {
-            const prevClose = closingPrices[i - 1];
-            tr.push(Math.max(
-                highs[i] - lows[i],
-                Math.abs(highs[i] - prevClose),
-                Math.abs(lows[i] - prevClose)
-            ));
-        }
+    for (let i = 1; i < relevantHighs.length; i++) {
+        const prevClose = relevantClosing[i - 1];
+        tr.push(Math.max(
+            relevantHighs[i] - relevantLows[i],
+            Math.abs(relevantHighs[i] - prevClose),
+            Math.abs(relevantLows[i] - prevClose)
+        ));
     }
 
-    // 计算ATR
-    const atr = [];
-    let sumTR = tr.slice(0, period).reduce((sum, val) => sum + val, 0);
-    atr.push(sumTR / period); // 初始ATR
-
-    for (let i = period; i < tr.length; i++) {
-        const currentATR = (atr[i - period] * (period - 1) + tr[i]) / period;
-        atr.push(currentATR);
-    }
-    
+    // 计算最终的ATR值（使用简单平均）
+    const atr = tr.reduce((sum, val) => sum + val, 0) / period;
     return atr;
 }
 
@@ -103,22 +98,18 @@ async function main() {
     // 获取数据
     const { closingPrices, highs, lows, currentClose, currentHigh, currentLow } = await fetchKlines();
     
-    // 计算指标（基于历史数据）
-    const ema120 = calculateEMA(closingPrices, 120);
-    const atr14 = calculateATR(highs, lows, closingPrices, 14);
-    
-    // 获取最新值（最后一个历史数据点）
-    const latestEMA120 = ema120[ema120.length - 2];
-    const latestATR14 = atr14[atr14.length - 2];
+    // 计算指标（基于历史数据，不包含当前K线）
+    const historicalEMA120 = calculateEMA(closingPrices.slice(-120), 120);
+    const historicalATR14 = calculateATR(highs, lows, closingPrices, 14);
     
     // 打印结果
     console.log('当前K线收盘价:', currentClose.toFixed(4));
-    console.log('历史EMA120:', latestEMA120.toFixed(4));
-    console.log('历史ATR14:', latestATR14.toFixed(4));
-    console.log('历史ATR14×1.5:', (latestATR14 * 1.5).toFixed(4));
+    console.log('历史EMA120:', historicalEMA120.toFixed(4));
+    console.log('历史ATR14:', historicalATR14.toFixed(4));
+    console.log('历史ATR14×1.5:', (historicalATR14 * 1.5).toFixed(4));
     
     // 计算与EMA120的距离
-    const distanceToEMA = ((currentClose - latestEMA120) / latestEMA120 * 100).toFixed(2);
+    const distanceToEMA = ((currentClose - historicalEMA120) / historicalEMA120 * 100).toFixed(2);
     console.log('当前价格与EMA120的距离:', distanceToEMA + '%');
 }
 
