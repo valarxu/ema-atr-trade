@@ -93,13 +93,16 @@ async function main() {
     const ema120 = calculateEMA(closingPrices, 120);
     const atr14 = calculateATR(highs, lows, closingPrices, 14);
     
-    // 获取最新值（最后一个数据点）
-    const latestClose = closingPrices[closingPrices.length - 1];
-    const latestEMA120 = ema120[ema120.length - 1];
-    const latestATR14 = atr14[atr14.length - 1];
+    // 获取倒数第二个数据点
+    const latestClose = closingPrices[closingPrices.length - 2];
+    const latestEMA120 = ema120[ema120.length - 2];
+    const latestATR14 = atr14[atr14.length - 2];
+
+    const currentClose = closingPrices[closingPrices.length - 1];
     
     // 打印结果
-    console.log('最近收盘价:', latestClose.toFixed(4));
+    console.log('当前收盘价:', currentClose.toFixed(4));
+    console.log('上一根4h收盘价:', latestClose.toFixed(4));
     console.log('EMA120:', latestEMA120.toFixed(4));
     console.log('ATR14:', latestATR14.toFixed(4));
     console.log('ATR14×1.5:', (latestATR14 * 1.5).toFixed(4));
