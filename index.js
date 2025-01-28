@@ -108,8 +108,8 @@ async function main() {
     const atr14 = calculateATR(highs, lows, closingPrices, 14);
     
     // 获取最新值（最后一个历史数据点）
-    const latestEMA120 = ema120[ema120.length - 1];
-    const latestATR14 = atr14[atr14.length - 1];
+    const latestEMA120 = ema120[ema120.length - 2];
+    const latestATR14 = atr14[atr14.length - 2];
     
     // 打印结果
     console.log('当前K线收盘价:', currentClose.toFixed(4));
