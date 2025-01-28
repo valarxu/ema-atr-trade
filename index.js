@@ -7,29 +7,43 @@ async function fetchKlines() {
             params: {
                 instId: 'BTC-USDT', // 可修改交易对
                 bar: '4H',
-                limit: '121'       // 获取121根用于正确计算EMA120
+                limit: '122'       // 获取122根用于正确计算EMA120（121 + 当前K线）
             }
         });
         
         const candles = response.data.data;
-        if (!candles || candles.length < 121) {
+        if (!candles || candles.length < 122) {
             throw new Error('Not enough kline data');
         }
 
         // 反转数组为时间正序（旧->新）
         const reversedCandles = candles.reverse();
         
-        // 提取价格数据
+        // 提取价格数据，分离当前K线和历史K线
+        const currentCandle = reversedCandles[reversedCandles.length - 1];
+        const historicalCandles = reversedCandles.slice(0, -1);
+        
+        const currentClose = parseFloat(currentCandle[4]);
+        const currentHigh = parseFloat(currentCandle[2]);
+        const currentLow = parseFloat(currentCandle[3]);
+        
         const closingPrices = [];
         const highs = [];
         const lows = [];
-        for (const candle of reversedCandles) {
+        for (const candle of historicalCandles) {
             closingPrices.push(parseFloat(candle[4])); // 收盘价在索引4
             highs.push(parseFloat(candle[2]));        // 最高价在索引2
             lows.push(parseFloat(candle[3]));         // 最低价在索引3
         }
         
-        return { closingPrices, highs, lows };
+        return { 
+            closingPrices, 
+            highs, 
+            lows,
+            currentClose,
+            currentHigh,
+            currentLow
+        };
     } catch (error) {
         console.error('获取K线数据失败:', error.message);
         process.exit(1);
@@ -87,25 +101,25 @@ function calculateATR(highs, lows, closingPrices, period) {
 
 async function main() {
     // 获取数据
-    const { closingPrices, highs, lows } = await fetchKlines();
+    const { closingPrices, highs, lows, currentClose, currentHigh, currentLow } = await fetchKlines();
     
-    // 计算指标
+    // 计算指标（基于历史数据）
     const ema120 = calculateEMA(closingPrices, 120);
     const atr14 = calculateATR(highs, lows, closingPrices, 14);
     
-    // 获取倒数第二个数据点
-    const latestClose = closingPrices[closingPrices.length - 2];
-    const latestEMA120 = ema120[ema120.length - 2];
-    const latestATR14 = atr14[atr14.length - 2];
-
-    const currentClose = closingPrices[closingPrices.length - 1];
+    // 获取最新值（最后一个历史数据点）
+    const latestEMA120 = ema120[ema120.length - 1];
+    const latestATR14 = atr14[atr14.length - 1];
     
     // 打印结果
-    console.log('当前收盘价:', currentClose.toFixed(4));
-    console.log('上一根4h收盘价:', latestClose.toFixed(4));
-    console.log('EMA120:', latestEMA120.toFixed(4));
-    console.log('ATR14:', latestATR14.toFixed(4));
-    console.log('ATR14×1.5:', (latestATR14 * 1.5).toFixed(4));
+    console.log('当前K线收盘价:', currentClose.toFixed(4));
+    console.log('历史EMA120:', latestEMA120.toFixed(4));
+    console.log('历史ATR14:', latestATR14.toFixed(4));
+    console.log('历史ATR14×1.5:', (latestATR14 * 1.5).toFixed(4));
+    
+    // 计算与EMA120的距离
+    const distanceToEMA = ((currentClose - latestEMA120) / latestEMA120 * 100).toFixed(2);
+    console.log('当前价格与EMA120的距离:', distanceToEMA + '%');
 }
 
 main();
