@@ -1,5 +1,20 @@
 const axios = require('axios');
 const cron = require('node-cron');
+const TelegramBot = require('node-telegram-bot-api');
+require('dotenv').config();
+
+// 初始化 Telegram Bot
+const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN);
+const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
+
+// 发送消息到Telegram的函数
+async function sendToTelegram(message) {
+    try {
+        await bot.sendMessage(TELEGRAM_CHAT_ID, message, { parse_mode: 'HTML' });
+    } catch (error) {
+        console.error('发送Telegram消息失败:', error.message);
+    }
+}
 
 // 获取K线数据
 async function fetchKlines() {
@@ -93,31 +108,41 @@ function calculateATR(highs, lows, closingPrices, period) {
 
 // 修改main函数名称并添加时间戳输出
 async function fetchAndCalculate() {
-    console.log('执行时间:', new Date().toLocaleString());
+    const executionTime = new Date().toLocaleString();
+    console.log('执行时间:', executionTime);
     try {
         // 获取数据
         const { closingPrices, highs, lows, currentClose } = await fetchKlines();
         
-        // 计算指标（基于历史数据，不包含当前K线）
+        // 计算指标
         const historicalEMA120 = calculateEMA(closingPrices.slice(-120), 120);
         const historicalATR14 = calculateATR(highs, lows, closingPrices, 14);
-        
-        // 获取倒数第二根K线的收盘价
         const previousClose = closingPrices[closingPrices.length - 1];
-        
-        // 打印结果
-        console.log('倒数第二根K线收盘价:', previousClose.toFixed(4));
-        console.log('当前K线收盘价:', currentClose.toFixed(4));
-        console.log('历史EMA120:', historicalEMA120.toFixed(4));
-        console.log('历史ATR14:', historicalATR14.toFixed(4));
-        console.log('历史ATR14×1.5:', (historicalATR14 * 1.5).toFixed(4));
-        
-        // 计算与EMA120的距离
         const distanceToEMA = ((currentClose - historicalEMA120) / historicalEMA120 * 100).toFixed(2);
-        console.log('当前价格与EMA120的距离:', distanceToEMA + '%');
+        
+        // 构建消息
+        const message = `
+<b>BTC监控报告</b> (${executionTime})
+--------------------------------
+倒数第二根K线收盘价: ${previousClose.toFixed(4)}
+当前K线收盘价: ${currentClose.toFixed(4)}
+历史EMA120: ${historicalEMA120.toFixed(4)}
+历史ATR14: ${historicalATR14.toFixed(4)}
+历史ATR14×1.5: ${(historicalATR14 * 1.5).toFixed(4)}
+当前价格与EMA120的距离: ${distanceToEMA}%
+`;
+        
+        // 打印到控制台
+        console.log(message);
         console.log('----------------------------------------');
+        
+        // 发送到Telegram
+        await sendToTelegram(message);
+        
     } catch (error) {
-        console.error('执行出错:', error);
+        const errorMessage = `执行出错: ${error.message}`;
+        console.error(errorMessage);
+        await sendToTelegram(`❌ ${errorMessage}`);
     }
 }
 
