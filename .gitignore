@@ -32,4 +32,7 @@ build/
 
 # 缓存文件
 .npm
-.yarn-cache 
+.yarn-cache
+
+# 忽略 package-lock.json
+package-lock.json 
