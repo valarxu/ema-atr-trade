@@ -36,3 +36,6 @@ build/
 
 # 忽略 package-lock.json
 package-lock.json 
+
+# 忽略策略文件
+ema_atr_strategy.pine

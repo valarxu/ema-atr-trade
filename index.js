@@ -1,6 +1,8 @@
 const axios = require('axios');
 const cron = require('node-cron');
 const TelegramBot = require('node-telegram-bot-api');
+const fs = require('fs');
+const path = require('path');
 require('dotenv').config();
 
 // 初始化 Telegram Bot
@@ -106,6 +108,30 @@ function calculateATR(highs, lows, closingPrices, period) {
     return atr;
 }
 
+// 添加创建日志文件夹的函数
+function ensureLogsDirectory() {
+    const logsDir = path.join(__dirname, 'logs');
+    if (!fs.existsSync(logsDir)) {
+        fs.mkdirSync(logsDir);
+    }
+    return logsDir;
+}
+
+// 添加记录交易日志的函数
+function logTrade(type, price, reason) {
+    const logsDir = ensureLogsDirectory();
+    const date = new Date();
+    const logFile = path.join(logsDir, `trades_${date.getFullYear()}_${(date.getMonth() + 1)}.txt`);
+    
+    const logEntry = `${date.toISOString()} - ${type} @ ${price} USDT - ${reason}\n`;
+    
+    fs.appendFileSync(logFile, logEntry);
+    return logEntry;
+}
+
+// 添加获取当前持仓状态的函数
+let currentPosition = 0; // 0: 无仓位, 1: 多头, -1: 空头
+
 // 修改main函数名称并添加时间戳输出
 async function fetchAndCalculate() {
     const executionTime = new Date().toLocaleString();
@@ -120,6 +146,33 @@ async function fetchAndCalculate() {
         const previousClose = closingPrices[closingPrices.length - 1];
         const distanceToEMA = ((currentClose - historicalEMA120) / historicalEMA120 * 100).toFixed(2);
         
+        // 计算价格与EMA的距离（以ATR为单位）
+        const priceDistance = (previousClose - historicalEMA120) / historicalATR14;
+        
+        // 策略信号判断
+        const atrMultiplier = 1.5;
+        let tradeAction = '无';
+
+        // 开仓信号
+        if (currentPosition === 0) {
+            if (previousClose > historicalEMA120 && priceDistance > atrMultiplier) {
+                currentPosition = 1;
+                tradeAction = logTrade('开多', previousClose, `价格在EMA之上，距离${priceDistance.toFixed(2)}个ATR`);
+            } else if (previousClose < historicalEMA120 && priceDistance < -atrMultiplier) {
+                currentPosition = -1;
+                tradeAction = logTrade('开空', previousClose, `价格在EMA之下，距离${priceDistance.toFixed(2)}个ATR`);
+            }
+        }
+        // 平仓信号
+        else if (currentPosition === 1 && previousClose < historicalEMA120) {
+            currentPosition = 0;
+            tradeAction = logTrade('平多', previousClose, '价格跌破EMA');
+        }
+        else if (currentPosition === -1 && previousClose > historicalEMA120) {
+            currentPosition = 0;
+            tradeAction = logTrade('平空', previousClose, '价格突破EMA');
+        }
+
         // 构建消息
         const message = `
 <b>BTC监控报告</b> (${executionTime})
@@ -130,7 +183,9 @@ async function fetchAndCalculate() {
 历史ATR14: ${historicalATR14.toFixed(4)}
 历史ATR14×1.5: ${(historicalATR14 * 1.5).toFixed(4)}
 当前价格与EMA120的距离: ${distanceToEMA}%
-`;
+价格偏离度(ATR倍数): ${priceDistance.toFixed(2)}
+当前持仓: ${currentPosition === 0 ? '无' : currentPosition === 1 ? '多' : '空'}
+${tradeAction ? '\n🔔 交易信号:\n' + tradeAction : ''}`;
         
         // 打印到控制台
         console.log(message);
