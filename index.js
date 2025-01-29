@@ -182,28 +182,27 @@ async function fetchAndCalculate() {
                 if (positionState[symbol] === 0) {
                     if (previousClose > historicalEMA120 && priceDistance > atrMultiplier) {
                         positionState[symbol] = 1;
-                        tradeAction = logTrade(symbol, '开多', previousClose, `价格在EMA之上，距离${priceDistance.toFixed(2)}个ATR`);
+                        tradeAction = logTrade(symbol, '开多🟢', previousClose, `价格在EMA之上，距离${priceDistance.toFixed(2)}个ATR`);
                     } else if (previousClose < historicalEMA120 && priceDistance < -atrMultiplier) {
                         positionState[symbol] = -1;
-                        tradeAction = logTrade(symbol, '开空', previousClose, `价格在EMA之下，距离${priceDistance.toFixed(2)}个ATR`);
+                        tradeAction = logTrade(symbol, '开空🔴', previousClose, `价格在EMA之下，距离${priceDistance.toFixed(2)}个ATR`);
                     }
                 }
                 // 平仓信号
                 else if (positionState[symbol] === 1 && previousClose < historicalEMA120) {
                     positionState[symbol] = 0;
-                    tradeAction = logTrade(symbol, '平多', previousClose, '价格跌破EMA');
+                    tradeAction = logTrade(symbol, '平多🔵', previousClose, '价格跌破EMA');
                 }
                 else if (positionState[symbol] === -1 && previousClose > historicalEMA120) {
                     positionState[symbol] = 0;
-                    tradeAction = logTrade(symbol, '平空', previousClose, '价格突破EMA');
+                    tradeAction = logTrade(symbol, '平空🔵', previousClose, '价格突破EMA');
                 }
 
                 // 构建该币种的消息
-                const coinMessage = `<b>${symbol}</b>
-实时: ${currentClose.toFixed(2)} | 前k收盘: ${previousClose.toFixed(2)}
-EMA120: ${historicalEMA120.toFixed(2)} | ATR14: ${historicalATR14.toFixed(2)}
-1.5ATR: ${(historicalATR14 * 1.5).toFixed(2)} | 价格偏离度: ${priceDistance.toFixed(2)}
-当前持仓: ${positionState[symbol] === 0 ? '无' : positionState[symbol] === 1 ? '多' : '空'}
+                const coinMessage = `<b>${symbol}(${currentClose.toFixed(2)})</b>
+前k收盘: ${previousClose.toFixed(2)} | EMA120: ${historicalEMA120.toFixed(2)}
+1.5ATR14: ${(historicalATR14 * 1.5).toFixed(2)} | 价格偏离度: ${priceDistance.toFixed(2)}
+当前持仓: ${positionState[symbol] === 0 ? '无' : positionState[symbol] === 1 ? '多🟢' : '空🔴'}
 ${tradeAction !== '无' ? '\n🔔 交易信号:\n' + tradeAction : ''}\n`;
 
                 allMessages += coinMessage;
