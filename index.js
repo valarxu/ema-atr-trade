@@ -102,7 +102,11 @@ async function main() {
     const historicalEMA120 = calculateEMA(closingPrices.slice(-120), 120);
     const historicalATR14 = calculateATR(highs, lows, closingPrices, 14);
     
+    // 获取倒数第二根K线的收盘价
+    const previousClose = closingPrices[closingPrices.length - 1];
+    
     // 打印结果
+    console.log('倒数第二根K线收盘价:', previousClose.toFixed(4));
     console.log('当前K线收盘价:', currentClose.toFixed(4));
     console.log('历史EMA120:', historicalEMA120.toFixed(4));
     console.log('历史ATR14:', historicalATR14.toFixed(4));
