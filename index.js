@@ -13,8 +13,7 @@ const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 const TRADING_PAIRS = [
     'BTC-USDT',
     'ETH-USDT',
-    'SOL-USDT',
-    'XRP-USDT'
+    'SOL-USDT'
 ];
 
 // 发送消息到Telegram的函数
@@ -33,12 +32,12 @@ async function fetchKlines(symbol) {
             params: {
                 instId: symbol,
                 bar: '4H',
-                limit: '122'
+                limit: '241'    // 保持获取241根K线
             }
         });
         
         const candles = response.data.data;
-        if (!candles || candles.length < 122) {
+        if (!candles || candles.length < 241) {
             throw new Error(`Not enough kline data for ${symbol}`);
         }
 
@@ -55,9 +54,9 @@ async function fetchKlines(symbol) {
         const highs = [];
         const lows = [];
         for (const candle of historicalCandles) {
-            closingPrices.push(parseFloat(candle[4])); // 收盘价在索引4
-            highs.push(parseFloat(candle[2]));        // 最高价在索引2
-            lows.push(parseFloat(candle[3]));         // 最低价在索引3
+            closingPrices.push(parseFloat(candle[4]));
+            highs.push(parseFloat(candle[2]));
+            lows.push(parseFloat(candle[3]));
         }
         
         return { 
@@ -74,45 +73,54 @@ async function fetchKlines(symbol) {
 
 // 计算EMA
 function calculateEMA(data, period) {
-    // 确保只使用最后period根K线的数据
-    const relevantData = data.slice(-period);
+    if (data.length < period) {
+        throw new Error('数据长度不足以计算EMA');
+    }
     
-    // 计算简单移动平均线 (SMA) 作为首个EMA值
-    const sma = relevantData.reduce((sum, val) => sum + val, 0) / period;
+    // 计算第一个EMA值（使用SMA作为起点）
+    let ema = data.slice(0, period).reduce((sum, price) => sum + price, 0) / period;
     
-    // 由于我们只需要最终的EMA值，可以简化计算
-    let ema = sma;
+    // 计算乘数
     const multiplier = 2 / (period + 1);
     
-    // 只计算最后一个EMA值
-    for (let i = 0; i < relevantData.length; i++) {
-        ema = (relevantData[i] - ema) * multiplier + ema;
+    // 从period位置开始，逐个计算EMA
+    for (let i = period; i < data.length; i++) {
+        ema = (data[i] - ema) * multiplier + ema;
     }
     
     return ema;
 }
 
-// 计算ATR
+// 修改 calculateATR 函数
 function calculateATR(highs, lows, closingPrices, period) {
-    // 确保只使用最后 period+1 根K线的数据（需要多一根用于计算第一个TR值）
-    const relevantHighs = highs.slice(-(period + 1));
-    const relevantLows = lows.slice(-(period + 1));
-    const relevantClosing = closingPrices.slice(-(period + 1));
-    
-    const tr = [];
-    
-    // 计算TR值
-    for (let i = 1; i < relevantHighs.length; i++) {
-        const prevClose = relevantClosing[i - 1];
-        tr.push(Math.max(
-            relevantHighs[i] - relevantLows[i],
-            Math.abs(relevantHighs[i] - prevClose),
-            Math.abs(relevantLows[i] - prevClose)
-        ));
+    if (highs.length < period + 1 || lows.length < period + 1 || closingPrices.length < period + 1) {
+        throw new Error('数据长度不足以计算ATR');
     }
 
-    // 计算最终的ATR值（使用简单平均）
-    const atr = tr.reduce((sum, val) => sum + val, 0) / period;
+    // 计算TR序列
+    const trValues = [];
+    for (let i = 1; i < closingPrices.length; i++) {
+        const high = highs[i];
+        const low = lows[i];
+        const prevClose = closingPrices[i - 1];
+        
+        const tr = Math.max(
+            high - low,                  // 当日价格范围
+            Math.abs(high - prevClose),  // 当日最高与前收盘的范围
+            Math.abs(low - prevClose)    // 当日最低与前收盘的范围
+        );
+        trValues.push(tr);
+    }
+
+    // 计算第一个ATR值（使用前period个TR的简单平均）
+    let atr = trValues.slice(0, period).reduce((sum, tr) => sum + tr, 0) / period;
+    
+    // 使用Wilder的方法计算后续ATR值（相当于period*2/(period+1)的EMA）
+    // Wilder的平滑系数 = 1/period
+    for (let i = period; i < trValues.length; i++) {
+        atr = ((period - 1) * atr + trValues[i]) / period;
+    }
+    
     return atr;
 }
 
@@ -141,8 +149,7 @@ function logTrade(symbol, type, price, reason) {
 const positionState = {
     'BTC-USDT': 0,
     'ETH-USDT': 0,
-    'SOL-USDT': 0,
-    'XRP-USDT': 0
+    'SOL-USDT': 0
 };
 
 // 修改主函数以处理多个交易对
@@ -159,8 +166,8 @@ async function fetchAndCalculate() {
                 // 获取数据
                 const { closingPrices, highs, lows, currentClose } = await fetchKlines(symbol);
                 
-                // 计算指标
-                const historicalEMA120 = calculateEMA(closingPrices.slice(-120), 120);
+                // 使用完整的历史数据计算 EMA
+                const historicalEMA120 = calculateEMA(closingPrices, 120);
                 const historicalATR14 = calculateATR(highs, lows, closingPrices, 14);
                 const previousClose = closingPrices[closingPrices.length - 1];
                 
