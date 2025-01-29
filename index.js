@@ -150,7 +150,7 @@ async function fetchAndCalculate() {
     const executionTime = new Date().toLocaleString();
     console.log('执行时间:', executionTime);
     
-    let allMessages = `<b>加密货币监控报告</b> (${executionTime})\n--------------------------------\n`;
+    let allMessages = `<b>监控报告</b> (${executionTime})\n--------------------------------\n`;
     
     try {
         // 依次处理每个交易对
@@ -192,16 +192,12 @@ async function fetchAndCalculate() {
                 }
 
                 // 构建该币种的消息
-                const coinMessage = `
-<b>${symbol}</b>
-实时报价: ${currentClose.toFixed(2)}
-前一根K线收盘价: ${previousClose.toFixed(2)}
-EMA120: ${historicalEMA120.toFixed(2)}
-ATR14: ${historicalATR14.toFixed(2)} | 1.5ATR: ${(historicalATR14 * 1.5).toFixed(2)}
-价格偏离度: ${priceDistance.toFixed(2)}
+                const coinMessage = `<b>${symbol}</b>
+实时: ${currentClose.toFixed(2)} | 前k收盘: ${previousClose.toFixed(2)}
+EMA120: ${historicalEMA120.toFixed(2)} | ATR14: ${historicalATR14.toFixed(2)}
+1.5ATR: ${(historicalATR14 * 1.5).toFixed(2)} | 价格偏离度: ${priceDistance.toFixed(2)}
 当前持仓: ${positionState[symbol] === 0 ? '无' : positionState[symbol] === 1 ? '多' : '空'}
-${tradeAction !== '无' ? '\n🔔 交易信号:\n' + tradeAction : ''}
---------------------------------\n`;
+${tradeAction !== '无' ? '\n🔔 交易信号:\n' + tradeAction : ''}\n`;
 
                 allMessages += coinMessage;
                 
