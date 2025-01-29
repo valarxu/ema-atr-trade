@@ -1,4 +1,5 @@
 const axios = require('axios');
+const cron = require('node-cron');
 
 // 获取K线数据
 async function fetchKlines() {
@@ -24,8 +25,6 @@ async function fetchKlines() {
         const historicalCandles = reversedCandles.slice(0, -1);
         
         const currentClose = parseFloat(currentCandle[4]);
-        const currentHigh = parseFloat(currentCandle[2]);
-        const currentLow = parseFloat(currentCandle[3]);
         
         const closingPrices = [];
         const highs = [];
@@ -41,8 +40,6 @@ async function fetchKlines() {
             highs, 
             lows,
             currentClose,
-            currentHigh,
-            currentLow
         };
     } catch (error) {
         console.error('获取K线数据失败:', error.message);
@@ -94,27 +91,41 @@ function calculateATR(highs, lows, closingPrices, period) {
     return atr;
 }
 
-async function main() {
-    // 获取数据
-    const { closingPrices, highs, lows, currentClose, currentHigh, currentLow } = await fetchKlines();
-    
-    // 计算指标（基于历史数据，不包含当前K线）
-    const historicalEMA120 = calculateEMA(closingPrices.slice(-120), 120);
-    const historicalATR14 = calculateATR(highs, lows, closingPrices, 14);
-    
-    // 获取倒数第二根K线的收盘价
-    const previousClose = closingPrices[closingPrices.length - 1];
-    
-    // 打印结果
-    console.log('倒数第二根K线收盘价:', previousClose.toFixed(4));
-    console.log('当前K线收盘价:', currentClose.toFixed(4));
-    console.log('历史EMA120:', historicalEMA120.toFixed(4));
-    console.log('历史ATR14:', historicalATR14.toFixed(4));
-    console.log('历史ATR14×1.5:', (historicalATR14 * 1.5).toFixed(4));
-    
-    // 计算与EMA120的距离
-    const distanceToEMA = ((currentClose - historicalEMA120) / historicalEMA120 * 100).toFixed(2);
-    console.log('当前价格与EMA120的距离:', distanceToEMA + '%');
+// 修改main函数名称并添加时间戳输出
+async function fetchAndCalculate() {
+    console.log('执行时间:', new Date().toLocaleString());
+    try {
+        // 获取数据
+        const { closingPrices, highs, lows, currentClose } = await fetchKlines();
+        
+        // 计算指标（基于历史数据，不包含当前K线）
+        const historicalEMA120 = calculateEMA(closingPrices.slice(-120), 120);
+        const historicalATR14 = calculateATR(highs, lows, closingPrices, 14);
+        
+        // 获取倒数第二根K线的收盘价
+        const previousClose = closingPrices[closingPrices.length - 1];
+        
+        // 打印结果
+        console.log('倒数第二根K线收盘价:', previousClose.toFixed(4));
+        console.log('当前K线收盘价:', currentClose.toFixed(4));
+        console.log('历史EMA120:', historicalEMA120.toFixed(4));
+        console.log('历史ATR14:', historicalATR14.toFixed(4));
+        console.log('历史ATR14×1.5:', (historicalATR14 * 1.5).toFixed(4));
+        
+        // 计算与EMA120的距离
+        const distanceToEMA = ((currentClose - historicalEMA120) / historicalEMA120 * 100).toFixed(2);
+        console.log('当前价格与EMA120的距离:', distanceToEMA + '%');
+        console.log('----------------------------------------');
+    } catch (error) {
+        console.error('执行出错:', error);
+    }
 }
 
-main();
+// 设置定时任务
+cron.schedule('1 0,4,8,12,16,20 * * *', fetchAndCalculate, {
+    timezone: "Asia/Shanghai"  // 设置时区为上海
+});
+
+// 程序启动时立即执行一次
+console.log('程序启动，开始监控...');
+fetchAndCalculate();
