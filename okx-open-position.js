@@ -9,7 +9,7 @@ async function placeOrder() {
     
     // 订单参数
     const orderData = {
-        instId: 'BTC-USDT',  // 交易对
+        instId: 'BTC-USDT-SWAP',  // 交易对
         tdMode: 'isolated',   // 逐仓模式
         side: 'buy',         // 买入方向
         ordType: 'market',   // 市价单
