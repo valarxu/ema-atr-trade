@@ -9,11 +9,11 @@ async function closePosition() {
     
     // 订单参数
     const orderData = {
-        instId: 'BTC-USDT',  // 交易对
+        instId: 'BTC-USDT-SWAP',  // 交易对
         tdMode: 'isolated',   // 逐仓模式
         side: 'sell',        // 卖出方向
         ordType: 'market',   // 市价单
-        sz: '0.001',         // 数量
+        sz: '0.01',         // 数量
         posSide: 'long'      // 持仓方向
     };
 
