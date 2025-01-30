@@ -2,23 +2,21 @@ const axios = require('axios');
 const CryptoJS = require('crypto-js');
 require('dotenv').config();
 
-async function placeOrder() {
+async function setLeverage() {
     const timestamp = new Date().toISOString();
     const method = 'POST';
-    const requestPath = '/api/v5/trade/order';
+    const requestPath = '/api/v5/account/set-leverage';
     
-    // 订单参数
-    const orderData = {
-        instId: 'BTC-USDT-SWAP',  // 交易对
-        tdMode: 'isolated',   // 逐仓模式
-        side: 'buy',         // 买入方向
-        ordType: 'market',   // 市价单
-        sz: '0.01',         // 数量
-        posSide: 'long'      // 持仓方向
+    // 设置参数
+    const leverageData = {
+        instId: 'BTC-USDT-SWAP',     // 产品ID
+        lever: '10',                  // 杠杆倍数
+        mgnMode: 'isolated',          // 保证金模式：isolated(逐仓)
+        posSide: 'long'               // 持仓方向：long(多仓)
     };
 
     // 生成签名
-    const signStr = `${timestamp}${method}${requestPath}${JSON.stringify(orderData)}`;
+    const signStr = `${timestamp}${method}${requestPath}${JSON.stringify(leverageData)}`;
     const signature = CryptoJS.enc.Base64.stringify(
         CryptoJS.HmacSHA256(
             signStr,
@@ -30,7 +28,7 @@ async function placeOrder() {
         const response = await axios({
             method: method,
             url: `https://www.okx.com${requestPath}`,
-            data: orderData,
+            data: leverageData,
             headers: {
                 'OK-ACCESS-KEY': process.env.OKX_API_KEY,
                 'OK-ACCESS-SIGN': signature,
@@ -40,10 +38,10 @@ async function placeOrder() {
             }
         });
         
-        console.log('开仓成功:', response.data);
+        console.log('设置杠杆倍数成功:', response.data);
     } catch (error) {
-        console.error('开仓失败:', error.response ? error.response.data : error.message);
+        console.error('设置杠杆倍数失败:', error.response ? error.response.data : error.message);
     }
 }
 
-placeOrder(); 
+setLeverage(); 
