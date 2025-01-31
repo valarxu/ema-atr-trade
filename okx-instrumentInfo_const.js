@@ -22,7 +22,7 @@ const SOL_USDT_SWAP = {
     minSz: '0.01',
 };
 
-const POSITION_USDT = 100;
+const POSITION_USDT = 1000;
 
 // 导出所有常量
 module.exports = {
