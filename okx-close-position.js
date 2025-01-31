@@ -67,10 +67,6 @@ async function closePosition(instId) {
     }
 }
 
-closePosition('BTC-USDT-SWAP');
-closePosition('ETH-USDT-SWAP');
-closePosition('SOL-USDT-SWAP');
-
 // 导出方法
 module.exports = {
     closePosition

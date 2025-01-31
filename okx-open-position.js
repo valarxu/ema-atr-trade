@@ -41,7 +41,7 @@ function calculateContractSize(instrumentInfo, currentPrice, positionUSDT) {
     return contractSize.toString();
 }
 
-async function placeOrder(symbol = 'BTC-USDT-SWAP', currentPrice = 65000) {
+async function placeOrder(symbol = 'BTC-USDT-SWAP', currentPrice = 65000, posSide = 'long') {
     const instrumentInfo = getInstrumentInfo(symbol);
     if (!instrumentInfo) {
         throw new Error('不支持的交易对');
@@ -51,6 +51,7 @@ async function placeOrder(symbol = 'BTC-USDT-SWAP', currentPrice = 65000) {
     console.log(`预期开仓价值: ${POSITION_USDT} USDT`);
     console.log(`当前币价: ${currentPrice} USDT`);
     console.log(`计算得到合约张数: ${contractSize} 张`);
+    console.log(`持仓方向: ${posSide}`);
     
     const timestamp = new Date().toISOString();
     const method = 'POST';
@@ -60,10 +61,10 @@ async function placeOrder(symbol = 'BTC-USDT-SWAP', currentPrice = 65000) {
     const orderData = {
         instId: symbol,           // 交易对
         tdMode: 'isolated',       // 逐仓模式
-        side: 'buy',              // 买入方向
+        side: posSide === 'long' ? 'buy' : 'sell',  // 做多买入，做空卖出
         ordType: 'market',        // 市价单
         sz: contractSize,         // 计算得到的合约张数
-        posSide: 'long'           // 持仓方向
+        posSide: posSide         // 持仓方向
     };
 
     // 生成签名
@@ -76,6 +77,13 @@ async function placeOrder(symbol = 'BTC-USDT-SWAP', currentPrice = 65000) {
     );
 
     try {
+        console.log('准备开仓:', {
+            交易对: orderData.instId,
+            持仓方向: orderData.posSide,
+            开仓方向: orderData.side,
+            开仓数量: orderData.sz
+        });
+
         const response = await axios({
             method: method,
             url: `https://www.okx.com${requestPath}`,
@@ -90,15 +98,14 @@ async function placeOrder(symbol = 'BTC-USDT-SWAP', currentPrice = 65000) {
         });
         
         console.log('开仓成功:', response.data);
+        return response.data;
     } catch (error) {
         console.error('开仓失败:', error.response ? error.response.data : error.message);
+        throw error;
     }
 }
 
-// 测试调用示例
-placeOrder('BTC-USDT-SWAP', 104800);  // BTC at 65000
-placeOrder('ETH-USDT-SWAP', 3250);   // ETH at 3500
-placeOrder('SOL-USDT-SWAP', 240);    // SOL at 100
-
-// 默认调用（测试用）
-// placeOrder(); 
+// 导出方法
+module.exports = {
+    placeOrder
+};
