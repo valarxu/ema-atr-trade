@@ -30,6 +30,7 @@ function calculateContractSize(instrumentInfo, currentPrice, positionUSDT) {
     
     // 确保合约张数符合最小变动单位
     const lotSize = parseFloat(instrumentInfo.lotSz);
+    // 向下取整到最接近的lotSize的整数倍
     contractSize = Math.floor(contractSize / lotSize) * lotSize;
     
     // 确保合约张数符合最小交易量
@@ -38,7 +39,8 @@ function calculateContractSize(instrumentInfo, currentPrice, positionUSDT) {
         contractSize = minSize;
     }
     
-    return contractSize.toString();
+    // 格式化数字，避免浮点数精度问题
+    return contractSize.toFixed(instrumentInfo.lotSz.split('.')[1].length);
 }
 
 async function placeOrder(symbol = 'BTC-USDT-SWAP', currentPrice = 65000, posSide = 'long') {
