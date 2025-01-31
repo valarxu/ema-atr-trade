@@ -2,7 +2,7 @@ const axios = require('axios');
 const CryptoJS = require('crypto-js');
 require('dotenv').config();
 
-async function getPositions(instId = '') {
+async function getPositions(instIds = []) {
     const timestamp = new Date().toISOString();
     const method = 'GET';
     const requestPath = '/api/v5/account/positions';
@@ -13,8 +13,9 @@ async function getPositions(instId = '') {
     };
     
     // 如果指定了具体交易对，则添加到查询参数中
-    if (instId) {
-        params.instId = instId;
+    if (instIds.length > 0) {
+        // OKX API支持用逗号分隔多个交易对
+        params.instId = instIds.join(',');
     }
 
     // 将查询参数转换为查询字符串

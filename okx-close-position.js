@@ -5,7 +5,7 @@ require('dotenv').config();
 
 async function closePosition(instId) {
     // 获取持仓信息
-    const positions = await getPositions(instId);
+    const positions = await getPositions([instId]);
     
     if (!positions.length) {
         console.log(`没有找到 ${instId} 的持仓信息`);

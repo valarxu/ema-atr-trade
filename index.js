@@ -16,6 +16,9 @@ const TRADING_PAIRS = [
     'SOL-USDT'
 ];
 
+// 将现货交易对转换为合约交易对
+const SWAP_PAIRS = TRADING_PAIRS.map(pair => `${pair}-SWAP`);
+
 // 为每个交易对维护独立的持仓状态
 const positionState = {
     'BTC-USDT': 0,
@@ -26,7 +29,8 @@ const positionState = {
 // 初始化持仓状态
 async function initializePositionState() {
     try {
-        const positions = await getPositions();
+        // 传入合约交易对获取持仓信息
+        const positions = await getPositions(SWAP_PAIRS);
         console.log('当前持仓信息:', positions);
 
         // 重置持仓状态
@@ -134,6 +138,51 @@ ${result.tradeAction !== '无' ? '\n🔔 交易信号:\n' + result.tradeAction :
     }
 }
 
+// 检查持仓状态并发送报告
+async function checkAndReportPositions() {
+    try {
+        // 传入合约交易对获取持仓信息
+        const positions = await getPositions(SWAP_PAIRS);
+        const executionTime = new Date().toLocaleString();
+        
+        let positionMessage = `<b>持仓状态报告</b> (${executionTime})\n--------------------------------\n`;
+        
+        if (positions.length === 0) {
+            positionMessage += '当前无持仓\n';
+        } else {
+            for (const position of positions) {
+                positionMessage += `\n<b>${position.instId}</b>
+持仓方向: ${position.posSide === 'long' ? '多🟢' : '空🔴'}
+持仓数量: ${position.pos}
+开仓均价: ${position.avgPx}
+未实现盈亏: ${position.upl}
+杠杆倍数: ${position.lever}x\n`;
+            }
+        }
+        
+        console.log(positionMessage);
+        await sendToTelegram(positionMessage);
+        
+        // 更新持仓状态
+        for (const symbol of TRADING_PAIRS) {
+            positionState[symbol] = 0;
+        }
+        
+        for (const position of positions) {
+            const baseSymbol = position.instId.replace('-SWAP', '');
+            if (position.pos !== '0') {
+                positionState[baseSymbol] = position.posSide === 'long' ? 1 : -1;
+            }
+        }
+        
+        console.log('更新后的持仓状态:', positionState);
+    } catch (error) {
+        const errorMessage = `检查持仓状态失败: ${error.message}`;
+        console.error(errorMessage);
+        await sendToTelegram(`❌ ${errorMessage}`);
+    }
+}
+
 // 程序启动流程
 async function startup() {
     console.log('程序启动，初始化持仓状态...');
@@ -145,10 +194,16 @@ async function startup() {
             // 初始化成功后执行第一次数据获取和计算
             await fetchAndCalculate();
             
-            // 设置定时任务
-            cron.schedule('1 0,4,8,12,16,20 * * *', fetchAndCalculate, {
+            // 设置K线数据获取和策略执行的定时任务
+            cron.schedule('15 0 0,4,8,12,16,20 * * *', fetchAndCalculate, {
                 timezone: "Asia/Shanghai"
             });
+            
+            // 设置持仓状态检查的定时任务
+            cron.schedule('0 59 3,7,11,15,19,23 * * *', checkAndReportPositions, {
+                timezone: "Asia/Shanghai"
+            });
+            
             return;
         }
         console.log(`初始化失败，第${i + 1}次重试...`);
