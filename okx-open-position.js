@@ -26,17 +26,17 @@ function calculateContractSize(instrumentInfo, currentPrice, positionUSDT) {
     const contractValue = parseFloat(instrumentInfo.ctVal) * currentPrice;
     
     // 需要的合约张数 = 预期仓位价值 / 每张合约价值
-    let contractSize = Math.floor(positionUSDT / contractValue);
+    let contractSize = positionUSDT / contractValue;
+    
+    // 确保合约张数符合最小变动单位
+    const lotSize = parseFloat(instrumentInfo.lotSz);
+    contractSize = Math.floor(contractSize / lotSize) * lotSize;
     
     // 确保合约张数符合最小交易量
     const minSize = parseFloat(instrumentInfo.minSz);
     if (contractSize < minSize) {
         contractSize = minSize;
     }
-    
-    // 确保合约张数符合最小变动单位
-    const lotSize = parseFloat(instrumentInfo.lotSz);
-    contractSize = Math.floor(contractSize / lotSize) * lotSize;
     
     return contractSize.toString();
 }
@@ -96,9 +96,9 @@ async function placeOrder(symbol = 'BTC-USDT-SWAP', currentPrice = 65000) {
 }
 
 // 测试调用示例
-placeOrder('BTC-USDT-SWAP', 65000);  // BTC at 65000
-placeOrder('ETH-USDT-SWAP', 3500);   // ETH at 3500
-placeOrder('SOL-USDT-SWAP', 100);    // SOL at 100
+placeOrder('BTC-USDT-SWAP', 104800);  // BTC at 65000
+placeOrder('ETH-USDT-SWAP', 3250);   // ETH at 3500
+placeOrder('SOL-USDT-SWAP', 240);    // SOL at 100
 
 // 默认调用（测试用）
 // placeOrder(); 
