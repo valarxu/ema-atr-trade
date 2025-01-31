@@ -7,6 +7,7 @@ const { logTrade } = require('./utils/logger');
 const { sendToTelegram } = require('./services/telegram');
 const { placeOrder } = require('./okx-open-position');
 const { closePosition } = require('./okx-close-position');
+const { getPositions } = require('./okx-get-positions');
 
 // 定义要监控的交易对
 const TRADING_PAIRS = [
@@ -21,6 +22,33 @@ const positionState = {
     'ETH-USDT': 0,
     'SOL-USDT': 0
 };
+
+// 初始化持仓状态
+async function initializePositionState() {
+    try {
+        const positions = await getPositions();
+        console.log('当前持仓信息:', positions);
+
+        // 重置持仓状态
+        for (const symbol of TRADING_PAIRS) {
+            positionState[symbol] = 0;
+        }
+
+        // 根据实际持仓更新状态
+        for (const position of positions) {
+            const baseSymbol = position.instId.replace('-SWAP', '');
+            if (position.pos !== '0') {
+                positionState[baseSymbol] = position.posSide === 'long' ? 1 : -1;
+            }
+        }
+
+        console.log('初始化持仓状态:', positionState);
+        return true;
+    } catch (error) {
+        console.error('初始化持仓状态失败:', error);
+        return false;
+    }
+}
 
 async function processSymbol(symbol) {
     const { closingPrices, highs, lows, currentClose } = await fetchKlines(symbol);
@@ -106,11 +134,30 @@ ${result.tradeAction !== '无' ? '\n🔔 交易信号:\n' + result.tradeAction :
     }
 }
 
-// 设置定时任务
-cron.schedule('1 0,4,8,12,16,20 * * *', fetchAndCalculate, {
-    timezone: "Asia/Shanghai"
-});
+// 程序启动流程
+async function startup() {
+    console.log('程序启动，初始化持仓状态...');
+    
+    // 尝试初始化持仓状态，最多重试3次
+    for (let i = 0; i < 3; i++) {
+        if (await initializePositionState()) {
+            console.log('持仓状态初始化成功，开始监控...');
+            // 初始化成功后执行第一次数据获取和计算
+            await fetchAndCalculate();
+            
+            // 设置定时任务
+            cron.schedule('1 0,4,8,12,16,20 * * *', fetchAndCalculate, {
+                timezone: "Asia/Shanghai"
+            });
+            return;
+        }
+        console.log(`初始化失败，第${i + 1}次重试...`);
+        await new Promise(resolve => setTimeout(resolve, 5000)); // 等待5秒后重试
+    }
+    
+    console.error('持仓状态初始化失败，程序退出');
+    process.exit(1);
+}
 
-// 程序启动时立即执行一次
-console.log('程序启动，开始监控...');
-fetchAndCalculate();
+// 启动程序
+startup();
