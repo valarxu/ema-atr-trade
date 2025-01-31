@@ -55,52 +55,66 @@ async function initializePositionState() {
 }
 
 async function processSymbol(symbol) {
-    const { closingPrices, highs, lows, currentClose } = await fetchKlines(symbol);
-    
-    const historicalEMA120 = calculateEMA(closingPrices, 120);
-    const historicalATR14 = calculateATR(highs, lows, closingPrices, 14);
-    const previousClose = closingPrices[closingPrices.length - 1];
-    
-    const priceDistance = (previousClose - historicalEMA120) / historicalATR14;
-    
-    const atrMultiplier = 1.5;
-    let tradeAction = '无';
-    const swapSymbol = `${symbol}-SWAP`;
+    try {
+        const { closingPrices, highs, lows, currentClose } = await fetchKlines(symbol);
+        
+        const historicalEMA120 = calculateEMA(closingPrices, 120);
+        const historicalATR14 = calculateATR(highs, lows, closingPrices, 14);
+        const previousClose = closingPrices[closingPrices.length - 1];
+        
+        const priceDistance = (previousClose - historicalEMA120) / historicalATR14;
+        
+        const atrMultiplier = 1.5;
+        let tradeAction = '无';
+        const swapSymbol = `${symbol}-SWAP`;
 
-    // 开仓信号
-    if (positionState[symbol] === 0) {
-        if (previousClose > historicalEMA120 && priceDistance > atrMultiplier) {
-            positionState[symbol] = 1;
-            tradeAction = logTrade(symbol, '开多🟢', previousClose, `价格在EMA之上，距离${priceDistance.toFixed(2)}个ATR`);
-            await placeOrder(swapSymbol, previousClose, 'long');
-        } else if (previousClose < historicalEMA120 && priceDistance < -atrMultiplier) {
-            positionState[symbol] = -1;
-            tradeAction = logTrade(symbol, '开空🔴', previousClose, `价格在EMA之下，距离${priceDistance.toFixed(2)}个ATR`);
-            await placeOrder(swapSymbol, previousClose, 'short');
+        // 开仓信号
+        if (positionState[symbol] === 0) {
+            if (previousClose > historicalEMA120 && priceDistance > atrMultiplier) {
+                // 尝试开多仓
+                await placeOrder(swapSymbol, previousClose, 'long');
+                // 开仓成功后再更新状态
+                positionState[symbol] = 1;
+                tradeAction = logTrade(symbol, '开多🟢', previousClose, `价格在EMA之上，距离${priceDistance.toFixed(2)}个ATR`);
+            } else if (previousClose < historicalEMA120 && priceDistance < -atrMultiplier) {
+                // 尝试开空仓
+                await placeOrder(swapSymbol, previousClose, 'short');
+                // 开仓成功后再更新状态
+                positionState[symbol] = -1;
+                tradeAction = logTrade(symbol, '开空🔴', previousClose, `价格在EMA之下，距离${priceDistance.toFixed(2)}个ATR`);
+            }
         }
-    }
-    // 平仓信号
-    else if (positionState[symbol] === 1 && previousClose < historicalEMA120) {
-        positionState[symbol] = 0;
-        tradeAction = logTrade(symbol, '平多🔵', previousClose, '价格跌破EMA');
-        await closePosition(swapSymbol);
-    }
-    else if (positionState[symbol] === -1 && previousClose > historicalEMA120) {
-        positionState[symbol] = 0;
-        tradeAction = logTrade(symbol, '平空🔵', previousClose, '价格突破EMA');
-        await closePosition(swapSymbol);
-    }
+        // 平仓信号
+        else if (positionState[symbol] === 1 && previousClose < historicalEMA120) {
+            // 尝试平多仓
+            await closePosition(swapSymbol);
+            // 平仓成功后再更新状态
+            positionState[symbol] = 0;
+            tradeAction = logTrade(symbol, '平多🔵', previousClose, '价格跌破EMA');
+        }
+        else if (positionState[symbol] === -1 && previousClose > historicalEMA120) {
+            // 尝试平空仓
+            await closePosition(swapSymbol);
+            // 平仓成功后再更新状态
+            positionState[symbol] = 0;
+            tradeAction = logTrade(symbol, '平空🔵', previousClose, '价格突破EMA');
+        }
 
-    return {
-        symbol,
-        currentClose,
-        previousClose,
-        historicalEMA120,
-        historicalATR14,
-        priceDistance,
-        positionState: positionState[symbol],
-        tradeAction
-    };
+        return {
+            symbol,
+            currentClose,
+            previousClose,
+            historicalEMA120,
+            historicalATR14,
+            priceDistance,
+            positionState: positionState[symbol],
+            tradeAction
+        };
+    } catch (error) {
+        // 如果交易过程中出错，立即同步一次持仓状态
+        await checkAndReportPositions();
+        throw error;
+    }
 }
 
 async function fetchAndCalculate() {
