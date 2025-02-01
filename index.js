@@ -165,7 +165,7 @@ async function checkAndReportPositions() {
             positionMessage += '当前无持仓\n';
         } else {
             for (const position of positions) {
-                if (Number(position.pos) > 0) {
+                if (position.pos !== '0') {
                     positionMessage += `\n<b>${position.instId}</b>
 持仓方向: ${position.posSide === 'long' ? '多🟢' : '空🔴'}
 持仓数量: ${position.pos}
