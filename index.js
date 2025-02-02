@@ -172,11 +172,7 @@ async function checkAndReportPositions() {
 开仓均价: ${position.avgPx}
 未实现盈亏: ${position.upl}
 杠杆倍数: ${position.lever}x\n`;
-                } else {
-                    positionMessage += `\n<b>${position.instId}</b>
-无持仓\n`;
                 }
-
             }
         }
 
