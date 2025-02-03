@@ -49,8 +49,11 @@ async function placeOrder(symbol = 'BTC-USDT-SWAP', currentPrice = 65000, posSid
         throw new Error('不支持的交易对');
     }
 
-    const contractSize = calculateContractSize(instrumentInfo, currentPrice, POSITION_USDT);
-    console.log(`预期开仓价值: ${POSITION_USDT} USDT`);
+    // 获取对应交易对的仓位价值
+    const positionValue = POSITION_USDT[symbol] || 1000; // 默认使用1000 USDT
+    const contractSize = calculateContractSize(instrumentInfo, currentPrice, positionValue);
+    
+    console.log(`预期开仓价值: ${positionValue} USDT`);
     console.log(`当前币价: ${currentPrice} USDT`);
     console.log(`计算得到合约张数: ${contractSize} 张`);
     console.log(`持仓方向: ${posSide}`);

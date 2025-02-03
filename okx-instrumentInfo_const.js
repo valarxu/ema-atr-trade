@@ -22,7 +22,11 @@ const SOL_USDT_SWAP = {
     minSz: '0.01',
 };
 
-const POSITION_USDT = 1000;
+const POSITION_USDT = {
+    'BTC-USDT-SWAP': 6000,
+    'ETH-USDT-SWAP': 3000,
+    'SOL-USDT-SWAP': 3000
+};
 
 // 导出所有常量
 module.exports = {
