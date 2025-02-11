@@ -155,7 +155,6 @@ ${result.tradeAction !== '无' ? '\n🔔 交易信号:\n' + result.tradeAction :
 // 检查持仓状态并发送报告
 async function checkAndReportPositions() {
     try {
-        // 传入合约交易对获取持仓信息
         const positions = await getPositions(SWAP_PAIRS);
         const executionTime = new Date().toLocaleString();
 
@@ -168,10 +167,8 @@ async function checkAndReportPositions() {
                 if (position.pos !== '0') {
                     positionMessage += `\n<b>${position.instId}</b>
 持仓方向: ${position.posSide === 'long' ? '多🟢' : '空🔴'}
-持仓数量: ${position.pos}
-开仓均价: ${position.avgPx}
-未实现盈亏: ${position.upl}
-杠杆倍数: ${position.lever}x\n`;
+开仓均价: ${Number(position.avgPx).toFixed(2)}
+未实现盈亏: ${Number(position.upl).toFixed(2)}\n`;
                 }
             }
         }
