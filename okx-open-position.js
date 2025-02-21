@@ -7,6 +7,7 @@ const {
     BTC_USDT_SWAP,
     ETH_USDT_SWAP,
     SOL_USDT_SWAP,
+    ADA_USDT_SWAP,
     POSITION_USDT
 } = require('./okx-instrumentInfo_const.js');
 
@@ -15,7 +16,8 @@ function getInstrumentInfo(symbol) {
     const instrumentMap = {
         'BTC-USDT-SWAP': BTC_USDT_SWAP,
         'ETH-USDT-SWAP': ETH_USDT_SWAP,
-        'SOL-USDT-SWAP': SOL_USDT_SWAP
+        'SOL-USDT-SWAP': SOL_USDT_SWAP,
+        'ADA-USDT-SWAP': ADA_USDT_SWAP
     };
     return instrumentMap[symbol];
 }
