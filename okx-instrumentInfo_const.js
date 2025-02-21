@@ -23,7 +23,7 @@ const SOL_USDT_SWAP = {
 };
 
 const ADA_USDT_SWAP = {
-    instId: 'SOL-USDT-SWAP',
+    instId: 'ADA-USDT-SWAP',
     ctVal: '100',
     ctValCcy: 'ADA',
     lotSz: '0.1',
