@@ -22,10 +22,19 @@ const SOL_USDT_SWAP = {
     minSz: '0.01',
 };
 
+const ADA_USDT_SWAP = {
+    instId: 'SOL-USDT-SWAP',
+    ctVal: '100',
+    ctValCcy: 'ADA',
+    lotSz: '0.1',
+    minSz: '0.1',
+};
+
 const POSITION_USDT = {
     'BTC-USDT-SWAP': 6000,
     'ETH-USDT-SWAP': 3000,
-    'SOL-USDT-SWAP': 3000
+    'SOL-USDT-SWAP': 3000,
+    'ADA-USDT-SWAP': 3000
 };
 
 // 导出所有常量
@@ -33,5 +42,6 @@ module.exports = {
     BTC_USDT_SWAP,
     ETH_USDT_SWAP,
     SOL_USDT_SWAP,
+    ADA_USDT_SWAP,
     POSITION_USDT
 };

@@ -13,7 +13,8 @@ const { getPositions } = require('./okx-get-positions');
 const TRADING_PAIRS = [
     'BTC-USDT',
     'ETH-USDT',
-    'SOL-USDT'
+    'SOL-USDT',
+    'ADA-USDT'
 ];
 
 // 将现货交易对转换为合约交易对
@@ -23,7 +24,8 @@ const SWAP_PAIRS = TRADING_PAIRS.map(pair => `${pair}-SWAP`);
 const positionState = {
     'BTC-USDT': 0,
     'ETH-USDT': 0,
-    'SOL-USDT': 0
+    'SOL-USDT': 0,
+    'ADA-USDT': 0
 };
 
 // 初始化持仓状态
