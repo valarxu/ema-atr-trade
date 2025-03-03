@@ -4,7 +4,7 @@ require('dotenv').config();
 const { calculateEMA, calculateATR } = require('./utils/technical-indicators');
 const { fetchKlines } = require('./services/market-data');
 const { logTrade } = require('./utils/logger');
-const { sendToTelegram } = require('./services/telegram');
+const { sendToTelegram, setupTelegramBot } = require('./services/telegram');
 const { placeOrder } = require('./okx-open-position');
 const { closePosition } = require('./okx-close-position');
 const { getPositions } = require('./okx-get-positions');
@@ -26,6 +26,14 @@ const positionState = {
     'ETH-USDT': 0,
     'SOL-USDT': 0,
     'ADA-USDT': 0
+};
+
+// 为每个交易对维护交易启用状态（默认全部启用）
+const tradingEnabled = {
+    'BTC-USDT': true,
+    'ETH-USDT': true,
+    'SOL-USDT': true,
+    'ADA-USDT': true
 };
 
 // 初始化持仓状态
@@ -70,6 +78,22 @@ async function processSymbol(symbol) {
         let tradeAction = '无';
         const swapSymbol = `${symbol}-SWAP`;
 
+        // 检查该交易对是否允许交易
+        if (!tradingEnabled[symbol]) {
+            console.log(`${symbol}交易已禁用，跳过交易信号执行`);
+            return {
+                symbol,
+                currentClose,
+                previousClose,
+                historicalEMA120,
+                historicalATR14,
+                priceDistance,
+                positionState: positionState[symbol],
+                tradeAction: '交易已禁用',
+                tradingEnabled: false
+            };
+        }
+
         // 开仓信号
         if (positionState[symbol] === 0) {
             if (previousClose > historicalEMA120 && priceDistance > atrMultiplier) {
@@ -110,7 +134,8 @@ async function processSymbol(symbol) {
             historicalATR14,
             priceDistance,
             positionState: positionState[symbol],
-            tradeAction
+            tradeAction,
+            tradingEnabled: true
         };
     } catch (error) {
         // 如果交易过程中出错，立即同步一次持仓状态
@@ -134,6 +159,7 @@ async function fetchAndCalculate() {
 前k收盘: ${result.previousClose.toFixed(2)} | EMA120: ${result.historicalEMA120.toFixed(2)}
 1.5ATR14: ${(result.historicalATR14 * 1.5).toFixed(2)} | 价格偏离度: ${result.priceDistance.toFixed(2)}
 当前持仓: ${result.positionState === 0 ? '无' : result.positionState === 1 ? '多🟢' : '空🔴'}
+交易状态: ${result.tradingEnabled ? '已启用✅' : '已禁用❌'}
 ${result.tradeAction !== '无' ? '\n🔔 交易信号:\n' + result.tradeAction : ''}\n`;
 
                 allMessages += coinMessage;
@@ -198,9 +224,45 @@ async function checkAndReportPositions() {
     }
 }
 
+// 处理来自Telegram的命令
+function processTelegramCommand(command) {
+    const parts = command.split(' ');
+    if (parts.length < 2) {
+        return '命令格式错误。正确格式: /禁用 BTC-USDT 或 /启用 BTC-USDT';
+    }
+
+    const action = parts[0];
+    const symbol = parts[1];
+
+    // 检查交易对是否存在
+    if (!TRADING_PAIRS.includes(symbol)) {
+        return `交易对 ${symbol} 不存在。可用交易对: ${TRADING_PAIRS.join(', ')}`;
+    }
+
+    if (action === '/禁用') {
+        tradingEnabled[symbol] = false;
+        return `已禁用 ${symbol} 的交易`;
+    } else if (action === '/启用') {
+        tradingEnabled[symbol] = true;
+        return `已启用 ${symbol} 的交易`;
+    } else if (action === '/状态') {
+        // 返回所有交易对的状态
+        let statusMessage = '交易对状态:\n';
+        for (const pair of TRADING_PAIRS) {
+            statusMessage += `${pair}: ${tradingEnabled[pair] ? '已启用✅' : '已禁用❌'}\n`;
+        }
+        return statusMessage;
+    } else {
+        return '未知命令。可用命令: /禁用, /启用, /状态';
+    }
+}
+
 // 程序启动流程
 async function startup() {
     console.log('程序启动，初始化持仓状态...');
+
+    // 设置Telegram机器人以处理命令
+    setupTelegramBot(processTelegramCommand);
 
     // 尝试初始化持仓状态，最多重试3次
     for (let i = 0; i < 3; i++) {
