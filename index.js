@@ -28,12 +28,12 @@ const positionState = {
     'ADA-USDT': 0
 };
 
-// 为每个交易对维护交易启用状态（默认全部启用）
+// 为每个交易对维护交易启用状态（默认全部关闭）
 const tradingEnabled = {
-    'BTC-USDT': true,
-    'ETH-USDT': true,
-    'SOL-USDT': true,
-    'ADA-USDT': true
+    'BTC-USDT': false,
+    'ETH-USDT': false,
+    'SOL-USDT': false,
+    'ADA-USDT': false
 };
 
 // 初始化持仓状态
@@ -229,19 +229,43 @@ function processTelegramCommand(command) {
     const parts = command.split(' ');
     const action = parts[0];
     
-    // 处理状态查询命令
-    if (action === '/状态') {
+    // 处理不需要参数的命令
+    if (action === '/帮助' || action === '/help') {
+        // 返回所有可用命令的帮助信息
+        return `📋 <b>可用命令列表</b>\n
+<b>交易对控制命令:</b>
+/启用 BTC-USDT - 启用指定交易对的交易，并立即处理一次
+/禁用 BTC-USDT - 禁用指定交易对的交易
+/全部启用 - 启用所有交易对的交易
+/全部禁用 - 禁用所有交易对的交易
+
+<b>状态查询命令:</b>
+/状态 - 查看所有交易对的启用/禁用状态
+/帮助 - 显示此帮助信息`;
+    } else if (action === '/状态') {
         // 返回所有交易对的状态
         let statusMessage = '交易对状态:\n';
         for (const pair of TRADING_PAIRS) {
             statusMessage += `${pair}: ${tradingEnabled[pair] ? '已启用✅' : '已禁用❌'}\n`;
         }
         return statusMessage;
+    } else if (action === '/全部启用') {
+        // 启用所有交易对
+        for (const pair of TRADING_PAIRS) {
+            tradingEnabled[pair] = true;
+        }
+        return '已启用所有交易对';
+    } else if (action === '/全部禁用') {
+        // 禁用所有交易对
+        for (const pair of TRADING_PAIRS) {
+            tradingEnabled[pair] = false;
+        }
+        return '已禁用所有交易对';
     }
     
     // 处理需要参数的命令
     if (parts.length < 2) {
-        return '命令格式错误。正确格式: /禁用 BTC-USDT 或 /启用 ETH-USDT 或 /状态';
+        return '命令格式错误。正确格式: /禁用 BTC-USDT 或 /启用 ETH-USDT\n发送 /帮助 查看所有命令';
     }
     
     const symbol = parts[1];
@@ -256,9 +280,27 @@ function processTelegramCommand(command) {
         return `已禁用 ${symbol} 的交易`;
     } else if (action === '/启用') {
         tradingEnabled[symbol] = true;
-        return `已启用 ${symbol} 的交易`;
+        
+        // 立即处理该交易对
+        setTimeout(async () => {
+            try {
+                const result = await processSymbol(symbol);
+                const message = `${symbol} 立即处理结果:\n` +
+                    `价格: ${result.currentClose.toFixed(2)}\n` +
+                    `EMA120: ${result.historicalEMA120.toFixed(2)}\n` +
+                    `价格偏离度: ${result.priceDistance.toFixed(2)}\n` +
+                    `持仓状态: ${result.positionState === 0 ? '无' : result.positionState === 1 ? '多🟢' : '空🔴'}\n` +
+                    `${result.tradeAction !== '无' ? '交易信号: ' + result.tradeAction : '未触发交易信号'}`;
+                
+                sendToTelegram(message);
+            } catch (error) {
+                sendToTelegram(`处理 ${symbol} 时出错: ${error.message}`);
+            }
+        }, 0);
+        
+        return `已启用 ${symbol} 的交易，正在立即处理...`;
     } else {
-        return '未知命令。可用命令: /禁用, /启用, /状态';
+        return '未知命令。发送 /帮助 查看所有可用命令';
     }
 }
 

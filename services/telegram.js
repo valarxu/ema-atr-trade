@@ -28,7 +28,7 @@ function setupTelegramBot(cmdHandler) {
         });
 
         console.log('Telegram机器人初始化成功，正在监听命令');
-        sendToTelegram('🤖 交易机器人已启动，可接收交易控制命令\n\n可用命令:\n/禁用 BTC-USDT\n/启用 ETH-USDT\n/状态');
+        sendToTelegram('🤖 交易机器人已启动，可接收交易控制命令\n\n发送 /帮助 查看所有可用命令');
     } catch (error) {
         console.error('Telegram机器人初始化失败:', error);
     }
