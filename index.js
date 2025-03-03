@@ -227,11 +227,23 @@ async function checkAndReportPositions() {
 // 处理来自Telegram的命令
 function processTelegramCommand(command) {
     const parts = command.split(' ');
-    if (parts.length < 2) {
-        return '命令格式错误。正确格式: /禁用 BTC-USDT 或 /启用 BTC-USDT';
-    }
-
     const action = parts[0];
+    
+    // 处理状态查询命令
+    if (action === '/状态') {
+        // 返回所有交易对的状态
+        let statusMessage = '交易对状态:\n';
+        for (const pair of TRADING_PAIRS) {
+            statusMessage += `${pair}: ${tradingEnabled[pair] ? '已启用✅' : '已禁用❌'}\n`;
+        }
+        return statusMessage;
+    }
+    
+    // 处理需要参数的命令
+    if (parts.length < 2) {
+        return '命令格式错误。正确格式: /禁用 BTC-USDT 或 /启用 ETH-USDT 或 /状态';
+    }
+    
     const symbol = parts[1];
 
     // 检查交易对是否存在
@@ -245,13 +257,6 @@ function processTelegramCommand(command) {
     } else if (action === '/启用') {
         tradingEnabled[symbol] = true;
         return `已启用 ${symbol} 的交易`;
-    } else if (action === '/状态') {
-        // 返回所有交易对的状态
-        let statusMessage = '交易对状态:\n';
-        for (const pair of TRADING_PAIRS) {
-            statusMessage += `${pair}: ${tradingEnabled[pair] ? '已启用✅' : '已禁用❌'}\n`;
-        }
-        return statusMessage;
     } else {
         return '未知命令。可用命令: /禁用, /启用, /状态';
     }
