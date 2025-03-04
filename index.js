@@ -148,25 +148,26 @@ async function fetchAndCalculate() {
     const executionTime = new Date().toLocaleString();
     console.log('执行时间:', executionTime);
 
-    let allMessages = `<b>监控报告</b> (${executionTime})\n--------------------------------\n`;
+    let allMessages = `<b>📊 监控报告</b> (${executionTime})\n\n`;
 
     try {
         for (const symbol of TRADING_PAIRS) {
             try {
                 const result = await processSymbol(symbol);
 
-                const coinMessage = `<b>${symbol}(${result.currentClose.toFixed(2)})</b>
-前k收盘: ${result.previousClose.toFixed(2)} | EMA120: ${result.historicalEMA120.toFixed(2)}
-1.5ATR14: ${(result.historicalATR14 * 1.5).toFixed(2)} | 价格偏离度: ${result.priceDistance.toFixed(2)}
-当前持仓: ${result.positionState === 0 ? '无' : result.positionState === 1 ? '多🟢' : '空🔴'}
-交易状态: ${result.tradingEnabled ? '已启用✅' : '已禁用❌'}
-${result.tradeAction !== '无' ? '\n🔔 交易信号:\n' + result.tradeAction : ''}\n`;
+                const coinMessage = `<b>🔸 ${symbol} (${result.currentClose.toFixed(2)})</b>\n` +
+                    `close: ${result.previousClose.toFixed(2)} | EMA120: ${result.historicalEMA120.toFixed(2)}\n` +
+                    `ATR: ${(result.historicalATR14 * 1.5).toFixed(2)} | 价格偏离度: ${result.priceDistance.toFixed(2)}\n` +
+                    `当前持仓: ${result.positionState === 0 ? '无' : result.positionState === 1 ? '多🟢' : '空🔴'}\n` +
+                    `交易状态: ${result.tradingEnabled ? '已启用✅' : '已禁用❌'}\n` +
+                    `${result.tradeAction !== '无' ? '🔔 交易信号:\n' + result.tradeAction : ''}\n` +
+                    `\n${'━━━━━━━━━━━━━━━━━━━━━━━━━'}\n\n`;
 
                 allMessages += coinMessage;
 
             } catch (error) {
                 console.error(`处理${symbol}时出错:`, error.message);
-                allMessages += `\n❌ ${symbol}处理出错: ${error.message}\n--------------------------------\n`;
+                allMessages += `\n❌ <b>${symbol}处理出错</b>: ${error.message}\n${'━━━━━━━━━━━━━━━━━━━━━━━━━'}\n\n`;
             }
         }
 
@@ -186,17 +187,18 @@ async function checkAndReportPositions() {
         const positions = await getPositions(SWAP_PAIRS);
         const executionTime = new Date().toLocaleString();
 
-        let positionMessage = `<b>持仓状态报告</b> (${executionTime})\n`;
+        let positionMessage = `<b>📈 持仓状态报告</b> (${executionTime})\n\n`;
 
         if (positions.length === 0) {
             positionMessage += '当前无持仓\n';
         } else {
             for (const position of positions) {
                 if (position.pos !== '0') {
-                    positionMessage += `\n<b>${position.instId}</b>
-持仓方向: ${position.posSide === 'long' ? '多🟢' : '空🔴'}
-开仓均价: ${Number(position.avgPx).toFixed(2)}
-未实现盈亏: ${Number(position.upl).toFixed(2)}\n`;
+                    positionMessage += `<b>🔹 ${position.instId}</b>\n` +
+                        `持仓方向: ${position.posSide === 'long' ? '多🟢' : '空🔴'}\n` +
+                        `开仓均价: ${Number(position.avgPx).toFixed(2)}\n` +
+                        `未实现盈亏: ${Number(position.upl).toFixed(2)}\n` +
+                        `\n${'━━━━━━━━━━━━━━━━━━━━━━━━━'}\n\n`;
                 }
             }
         }
