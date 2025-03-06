@@ -161,13 +161,13 @@ async function fetchAndCalculate() {
                     `当前持仓: ${result.positionState === 0 ? '无' : result.positionState === 1 ? '多🟢' : '空🔴'}\n` +
                     `交易状态: ${result.tradingEnabled ? '已启用✅' : '已禁用❌'}\n` +
                     `${result.tradeAction !== '无' ? '🔔 交易信号:\n' + result.tradeAction : ''}\n` +
-                    `\n${'━━━━━━━━━━━━━━━━━━━━━━━━━'}\n\n`;
+                    `\n${'━━━━━━━━━━'}\n\n`;
 
                 allMessages += coinMessage;
 
             } catch (error) {
                 console.error(`处理${symbol}时出错:`, error.message);
-                allMessages += `\n❌ <b>${symbol}处理出错</b>: ${error.message}\n${'━━━━━━━━━━━━━━━━━━━━━━━━━'}\n\n`;
+                allMessages += `\n❌ <b>${symbol}处理出错</b>: ${error.message}\n${'━━━━━━━━━━'}\n\n`;
             }
         }
 
@@ -198,7 +198,7 @@ async function checkAndReportPositions() {
                         `持仓方向: ${position.posSide === 'long' ? '多🟢' : '空🔴'}\n` +
                         `开仓均价: ${Number(position.avgPx).toFixed(2)}\n` +
                         `未实现盈亏: ${Number(position.upl).toFixed(2)}\n` +
-                        `\n${'━━━━━━━━━━━━━━━━━━━━━━━━━'}\n\n`;
+                        `\n${'━━━━━━━━━━'}\n\n`;
                 }
             }
         }
