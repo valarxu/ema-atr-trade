@@ -36,6 +36,19 @@ const tradingEnabled = {
     'ADA-USDT': false
 };
 
+// 新增: 为每个交易对维护是否忽略做空信号的状态
+const ignoreShortSignals = {
+    'BTC-USDT': false,
+    'ETH-USDT': false,
+    'SOL-USDT': false,
+    'ADA-USDT': false
+};
+
+// 策略参数
+const atrMultiplier = 1.5;
+// 新增: 做空止盈ATR倍数
+const shortTakeProfitAtrMultiplier = 5.0;
+
 // 初始化持仓状态
 async function initializePositionState() {
     try {
@@ -74,7 +87,6 @@ async function processSymbol(symbol) {
 
         const priceDistance = (previousClose - historicalEMA120) / historicalATR14;
 
-        const atrMultiplier = 1.5;
         let tradeAction = '无';
         const swapSymbol = `${symbol}-SWAP`;
 
@@ -89,9 +101,16 @@ async function processSymbol(symbol) {
                 historicalATR14,
                 priceDistance,
                 positionState: positionState[symbol],
+                ignoreShortSignal: ignoreShortSignals[symbol],
                 tradeAction: '交易已禁用',
                 tradingEnabled: false
             };
+        }
+
+        // 新增: 检查是否应该重置忽略做空信号的状态
+        if (previousClose > historicalEMA120 && ignoreShortSignals[symbol]) {
+            ignoreShortSignals[symbol] = false;
+            console.log(`${symbol} 价格回到EMA上方，重置忽略做空信号标志`);
         }
 
         // 开仓信号
@@ -102,8 +121,8 @@ async function processSymbol(symbol) {
                 // 开仓成功后再更新状态
                 positionState[symbol] = 1;
                 tradeAction = logTrade(symbol, '开多🟢', previousClose, `价格在EMA之上，距离${priceDistance.toFixed(2)}个ATR`);
-            } else if (previousClose < historicalEMA120 && priceDistance < -atrMultiplier) {
-                // 尝试开空仓
+            } else if (previousClose < historicalEMA120 && priceDistance < -atrMultiplier && !ignoreShortSignals[symbol]) {
+                // 新增: 仅在不忽略做空信号时尝试开空仓
                 await placeOrder(swapSymbol, previousClose, 'short');
                 // 开仓成功后再更新状态
                 positionState[symbol] = -1;
@@ -118,12 +137,21 @@ async function processSymbol(symbol) {
             positionState[symbol] = 0;
             tradeAction = logTrade(symbol, '平多🔵', previousClose, '价格跌破EMA');
         }
-        else if (positionState[symbol] === -1 && previousClose > historicalEMA120) {
-            // 尝试平空仓
-            await closePosition(swapSymbol);
-            // 平仓成功后再更新状态
-            positionState[symbol] = 0;
-            tradeAction = logTrade(symbol, '平空🔵', previousClose, '价格突破EMA');
+        else if (positionState[symbol] === -1) {
+            // 新增: 做空止盈条件
+            if (priceDistance < -shortTakeProfitAtrMultiplier) {
+                // 做空止盈
+                await closePosition(swapSymbol);
+                positionState[symbol] = 0;
+                ignoreShortSignals[symbol] = true; // 设置忽略做空信号
+                tradeAction = logTrade(symbol, '平空🔵', previousClose, `做空止盈触发，价格偏离${priceDistance.toFixed(2)}个ATR`);
+            }
+            // 原始平空条件
+            else if (previousClose > historicalEMA120) {
+                await closePosition(swapSymbol);
+                positionState[symbol] = 0;
+                tradeAction = logTrade(symbol, '平空🔵', previousClose, '价格突破EMA');
+            }
         }
 
         return {
@@ -134,6 +162,7 @@ async function processSymbol(symbol) {
             historicalATR14,
             priceDistance,
             positionState: positionState[symbol],
+            ignoreShortSignal: ignoreShortSignals[symbol],
             tradeAction,
             tradingEnabled: true
         };
@@ -160,6 +189,7 @@ async function fetchAndCalculate() {
                     `ATR: ${(result.historicalATR14 * 1.5).toFixed(2)} | 价格偏离度: ${result.priceDistance.toFixed(2)}\n` +
                     `当前持仓: ${result.positionState === 0 ? '无' : result.positionState === 1 ? '多🟢' : '空🔴'}\n` +
                     `交易状态: ${result.tradingEnabled ? '已启用✅' : '已禁用❌'}\n` +
+                    `忽略做空信号: ${result.ignoreShortSignal ? '是✅' : '否❌'}\n` +
                     `${result.tradeAction !== '无' ? '🔔 交易信号:\n' + result.tradeAction : ''}\n` +
                     `\n${'━━━━━━━━━━'}\n\n`;
 
@@ -243,12 +273,14 @@ function processTelegramCommand(command) {
 
 <b>状态查询命令:</b>
 /状态 - 查看所有交易对的启用/禁用状态
+/忽略空信号 BTC-USDT - 手动设置忽略指定交易对的做空信号
+/重置空信号 BTC-USDT - 重置指定交易对的忽略做空信号标志
 /帮助 - 显示此帮助信息`;
     } else if (action === '/状态') {
         // 返回所有交易对的状态
         let statusMessage = '交易对状态:\n';
         for (const pair of TRADING_PAIRS) {
-            statusMessage += `${pair}: ${tradingEnabled[pair] ? '已启用✅' : '已禁用❌'}\n`;
+            statusMessage += `${pair}: ${tradingEnabled[pair] ? '已启用✅' : '已禁用❌'} | 忽略做空信号: ${ignoreShortSignals[pair] ? '是✅' : '否❌'}\n`;
         }
         return statusMessage;
     } else if (action === '/全部启用') {
@@ -292,6 +324,7 @@ function processTelegramCommand(command) {
                     `EMA120: ${result.historicalEMA120.toFixed(2)}\n` +
                     `价格偏离度: ${result.priceDistance.toFixed(2)}\n` +
                     `持仓状态: ${result.positionState === 0 ? '无' : result.positionState === 1 ? '多🟢' : '空🔴'}\n` +
+                    `忽略做空信号: ${result.ignoreShortSignal ? '是✅' : '否❌'}\n` +
                     `${result.tradeAction !== '无' ? '交易信号: ' + result.tradeAction : '未触发交易信号'}`;
                 
                 sendToTelegram(message);
@@ -301,6 +334,14 @@ function processTelegramCommand(command) {
         }, 0);
         
         return `已启用 ${symbol} 的交易，正在立即处理...`;
+    } else if (action === '/忽略空信号') {
+        // 手动设置忽略做空信号
+        ignoreShortSignals[symbol] = true;
+        return `已设置忽略 ${symbol} 的做空信号，该币种将不会执行新的做空`;
+    } else if (action === '/重置空信号') {
+        // 重置指定交易对的忽略做空信号标志
+        ignoreShortSignals[symbol] = false;
+        return `已重置 ${symbol} 的忽略做空信号标志`;
     } else {
         return '未知命令。发送 /帮助 查看所有可用命令';
     }

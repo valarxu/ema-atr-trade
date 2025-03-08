@@ -3,9 +3,11 @@ strategy("阿吉EMA-ATR策略", overlay=true,
          process_orders_on_close=true, 
          calc_on_every_tick=false, 
          initial_capital=10000, 
-         default_qty_type=strategy.fixed, 
+         default_qty_type=strategy.cash, 
          default_qty_value=10000,
-         commission_value=0.1)
+         commission_value=0.1,
+         margin_long=0,
+         margin_short=0)
 
 // 时间范围选择器
 startDateInput = input.time(defval=timestamp("2018-01-01T00:00"), title="开始日期")
@@ -15,6 +17,8 @@ endDateInput = input.time(defval=timestamp("2025-12-31T23:59"), title="结束日
 emaLength = input.int(120, "EMA周期", minval=1)
 atrPeriod = input.int(14, "ATR周期", minval=1)
 atrMultiplier = input.float(1.5, "ATR倍数", minval=0.1, step=0.1)
+// 新增做空止盈参数
+shortTakeProfitAtrMultiplier = input.float(5.0, "做空止盈ATR倍数", minval=0.1, step=0.1)
 
 // 计算指标
 emaLine = ta.ema(close, emaLength)
@@ -28,17 +32,29 @@ plot(emaLine, "EMA", color=color.yellow, linewidth=2)
 
 // 记录当前持仓状态
 var float currentPosition = 0.0  // 0表示无仓位，1表示多头，-1表示空头
+// 新增变量，控制是否忽略做空信号
+var bool ignoreShortSignals = false
+
+// 价格回到EMA上方的条件（用于重置ignoreShortSignals）
+resetShortSignalCondition = close > emaLine and ignoreShortSignals
 
 // 交易信号
 longCondition = close > emaLine and priceDistance > atrMultiplier and currentPosition == 0
-shortCondition = close < emaLine and priceDistance < -atrMultiplier and currentPosition == 0
+shortCondition = close < emaLine and priceDistance < -atrMultiplier and currentPosition == 0 and not ignoreShortSignals
 
 // 平仓信号
 exitLongCondition = currentPosition == 1 and close < emaLine
 exitShortCondition = currentPosition == -1 and close > emaLine
 
+// 做空止盈条件
+shortTakeProfitCondition = currentPosition == -1 and priceDistance < -shortTakeProfitAtrMultiplier
+
 // 执行交易
 if time >= startDateInput and time <= endDateInput
+    // 重置忽略做空信号
+    if resetShortSignalCondition
+        ignoreShortSignals := false
+    
     // 开仓
     if longCondition
         strategy.entry("多", strategy.long, comment="开多")
@@ -46,17 +62,29 @@ if time >= startDateInput and time <= endDateInput
     if shortCondition
         strategy.entry("空", strategy.short, comment="开空")
         currentPosition := -1
+        ignoreShortSignals := false  // 开空时确保标志位为false
     
     // 平仓
     if exitLongCondition
         strategy.close("多", comment="平多")
         currentPosition := 0
+    
+    // 原始平空逻辑
     if exitShortCondition
-        strategy.close("空", comment="平空")
+        strategy.close("空", comment="平空-EMA")
         currentPosition := 0
+    
+    // 做空止盈逻辑
+    if shortTakeProfitCondition
+        strategy.close("空", comment="平空-止盈")
+        currentPosition := 0
+        ignoreShortSignals := true  // 设置忽略做空信号
 
 // 显示指标
-var table infoTable = table.new(position.top_right, 2, 2, color.black, color.white, 1, color.gray, 1)
+var table infoTable = table.new(position.top_right, 2, 3, color.black, color.white, 1, color.gray, 1)
 table.cell(infoTable, 0, 0, "价格偏离度(ATR倍数)", text_color=color.white)
 table.cell(infoTable, 1, 0, str.tostring(math.round(priceDistance, 2)), 
-     text_color = priceDistance > 0 ? color.green : color.red) 
+     text_color = priceDistance > 0 ? color.green : color.red)
+table.cell(infoTable, 0, 1, "忽略做空信号", text_color=color.white)
+table.cell(infoTable, 1, 1, ignoreShortSignals ? "是" : "否", 
+     text_color = ignoreShortSignals ? color.red : color.green) 
