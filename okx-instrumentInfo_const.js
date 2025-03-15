@@ -32,9 +32,9 @@ const ADA_USDT_SWAP = {
 
 const POSITION_USDT = {
     'BTC-USDT-SWAP': 6000,
-    'ETH-USDT-SWAP': 3000,
+    'ETH-USDT-SWAP': 4000,
     'SOL-USDT-SWAP': 3000,
-    'ADA-USDT-SWAP': 3000
+    'ADA-USDT-SWAP': 2000
 };
 
 // 导出所有常量
