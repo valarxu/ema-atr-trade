@@ -136,6 +136,24 @@ async function processSymbol(symbol) {
             // 平仓成功后再更新状态
             positionState[symbol] = 0;
             tradeAction = logTrade(symbol, '平多🔵', previousClose, '价格跌破EMA');
+
+            // 平仓后重新获取最新数据并评估开仓条件
+            try {
+                const { closingPrices: newClosingPrices, highs: newHighs, lows: newLows, currentClose: newCurrentClose } = await fetchKlines(symbol);
+                const newHistoricalEMA120 = calculateEMA(newClosingPrices, 120);
+                const newHistoricalATR14 = calculateATR(newHighs, newLows, newClosingPrices, 14);
+                const newPriceDistance = (newCurrentClose - newHistoricalEMA120) / newHistoricalATR14;
+
+                // 使用新数据评估开仓条件
+                if (newCurrentClose < newHistoricalEMA120 && newPriceDistance < -atrMultiplier && !ignoreShortSignals[symbol]) {
+                    // 尝试开空仓
+                    await placeOrder(swapSymbol, newCurrentClose, 'short');
+                    positionState[symbol] = -1;
+                    tradeAction = logTrade(symbol, '开空🔴', newCurrentClose, `平多后价格在EMA之下，距离${newPriceDistance.toFixed(2)}个ATR`);
+                }
+            } catch (error) {
+                console.error(`平多后重新评估开仓条件时出错: ${error.message}`);
+            }
         }
         else if (positionState[symbol] === -1) {
             // 新增: 做空止盈条件
@@ -145,12 +163,49 @@ async function processSymbol(symbol) {
                 positionState[symbol] = 0;
                 ignoreShortSignals[symbol] = true; // 设置忽略做空信号
                 tradeAction = logTrade(symbol, '平空🔵', previousClose, `做空止盈触发，价格偏离${priceDistance.toFixed(2)}个ATR`);
+
+                // 平仓后重新获取最新数据并评估开仓条件
+                try {
+                    const { closingPrices: newClosingPrices, highs: newHighs, lows: newLows, currentClose: newCurrentClose } = await fetchKlines(symbol);
+                    const newHistoricalEMA120 = calculateEMA(newClosingPrices, 120);
+                    const newHistoricalATR14 = calculateATR(newHighs, newLows, newClosingPrices, 14);
+                    const newPriceDistance = (newCurrentClose - newHistoricalEMA120) / newHistoricalATR14;
+
+                    // 使用新数据评估开仓条件
+                    if (newCurrentClose > newHistoricalEMA120 && newPriceDistance > atrMultiplier) {
+                        // 尝试开多仓
+                        await placeOrder(swapSymbol, newCurrentClose, 'long');
+                        positionState[symbol] = 1;
+                        ignoreShortSignals[symbol] = false; // 重置忽略做空信号状态
+                        tradeAction = logTrade(symbol, '开多🟢', newCurrentClose, `平空后价格在EMA之上，距离${newPriceDistance.toFixed(2)}个ATR`);
+                    }
+                } catch (error) {
+                    console.error(`平空后重新评估开仓条件时出错: ${error.message}`);
+                }
             }
             // 原始平空条件
             else if (previousClose > historicalEMA120) {
                 await closePosition(swapSymbol);
                 positionState[symbol] = 0;
                 tradeAction = logTrade(symbol, '平空🔵', previousClose, '价格突破EMA');
+
+                // 平仓后重新获取最新数据并评估开仓条件
+                try {
+                    const { closingPrices: newClosingPrices, highs: newHighs, lows: newLows, currentClose: newCurrentClose } = await fetchKlines(symbol);
+                    const newHistoricalEMA120 = calculateEMA(newClosingPrices, 120);
+                    const newHistoricalATR14 = calculateATR(newHighs, newLows, newClosingPrices, 14);
+                    const newPriceDistance = (newCurrentClose - newHistoricalEMA120) / newHistoricalATR14;
+
+                    // 使用新数据评估开仓条件
+                    if (newCurrentClose > newHistoricalEMA120 && newPriceDistance > atrMultiplier) {
+                        // 尝试开多仓
+                        await placeOrder(swapSymbol, newCurrentClose, 'long');
+                        positionState[symbol] = 1;
+                        tradeAction = logTrade(symbol, '开多🟢', newCurrentClose, `平空后价格在EMA之上，距离${newPriceDistance.toFixed(2)}个ATR`);
+                    }
+                } catch (error) {
+                    console.error(`平空后重新评估开仓条件时出错: ${error.message}`);
+                }
             }
         }
 
