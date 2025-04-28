@@ -239,14 +239,10 @@ async function fetchAndCalculate() {
             try {
                 const result = await processSymbol(symbol);
 
-                const coinMessage = `<b>🔸 ${symbol} (${result.currentClose.toFixed(2)})</b>\n` +
-                    `close: ${result.previousClose.toFixed(2)} | EMA120: ${result.historicalEMA120.toFixed(2)}\n` +
-                    `ATR: ${(result.historicalATR14 * 1.5).toFixed(2)} | 价格偏离度: ${result.priceDistance.toFixed(2)}\n` +
-                    `当前持仓: ${result.positionState === 0 ? '无' : result.positionState === 1 ? '多🟢' : '空🔴'}\n` +
-                    `交易状态: ${result.tradingEnabled ? '已启用✅' : '已禁用❌'}\n` +
-                    `忽略做空信号: ${result.ignoreShortSignal ? '是✅' : '否❌'}\n` +
-                    `${result.tradeAction !== '无' ? '🔔 交易信号:\n' + result.tradeAction : ''}\n` +
-                    `${'━━━━━━━━━━'}\n`;
+                const coinMessage = `<b>🔸 ${symbol.replace('-USDT', '')} (${result.currentClose.toFixed(2)})</b>\n` +
+                    `价格偏离度: ${result.priceDistance.toFixed(2)} | 当前持仓: ${result.positionState === 0 ? '无' : result.positionState === 1 ? '多🟢' : '空🔴'}\n` +
+                    `交易状态: ${result.tradingEnabled ? '✅' : '❌'} | 忽略做空: ${result.ignoreShortSignal ? '是' : '否'}\n` +
+                    `${result.tradeAction !== '无' ? '🔔 交易信号:\n' + result.tradeAction : ''}\n`;
 
                 allMessages += coinMessage;
 
@@ -279,11 +275,10 @@ async function checkAndReportPositions() {
         } else {
             for (const position of positions) {
                 if (position.pos !== '0') {
-                    positionMessage += `<b>🔹 ${position.instId}</b>\n` +
-                        `持仓方向: ${position.posSide === 'long' ? '多🟢' : '空🔴'}\n` +
-                        `开仓均价: ${Number(position.avgPx).toFixed(2)}\n` +
-                        `未实现盈亏: ${Number(position.upl).toFixed(2)}\n` +
-                        `${'━━━━━━━━━━'}\n`;
+                    positionMessage += `<b>🔹 ${position.instId.replace('-USDT-SWAP', '')}</b> | ` +
+                        `${position.posSide === 'long' ? '多🟢' : '空🔴'} | ` +
+                        `${Number(position.avgPx).toFixed(2)} | ` +
+                        `未实现盈亏: ${Number(position.upl).toFixed(2)}\n`;
                 }
             }
         }
