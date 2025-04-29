@@ -241,7 +241,7 @@ async function fetchAndCalculate() {
 
                 const coinMessage = `<b>🔸 ${symbol.replace('-USDT', '')} (${result.currentClose.toFixed(2)})</b>\n` +
                     `价格偏离度: ${result.priceDistance.toFixed(2)} | 当前持仓: ${result.positionState === 0 ? '无' : result.positionState === 1 ? '多🟢' : '空🔴'}\n` +
-                    `交易状态: ${result.tradingEnabled ? '✅' : '❌'} | 忽略做空: ${result.ignoreShortSignal ? '是' : '否'}\n` +
+                    `交易状态: ${result.tradingEnabled ? '是' : '否'} | 忽略做空: ${result.ignoreShortSignal ? '是' : '否'}\n` +
                     `${result.tradeAction !== '无' ? '🔔 交易信号:\n' + result.tradeAction : ''}\n`;
 
                 allMessages += coinMessage;
@@ -278,7 +278,7 @@ async function checkAndReportPositions() {
                     positionMessage += `<b>🔹 ${position.instId.replace('-USDT-SWAP', '')}</b> | ` +
                         `${position.posSide === 'long' ? '多🟢' : '空🔴'} | ` +
                         `${Number(position.avgPx).toFixed(2)} | ` +
-                        `未实现盈亏: ${Number(position.upl).toFixed(2)}\n`;
+                        `利润: ${Number(position.upl).toFixed(2)}\n`;
                 }
             }
         }
