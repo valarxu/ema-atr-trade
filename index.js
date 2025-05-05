@@ -269,18 +269,25 @@ async function checkAndReportPositions() {
         const executionTime = new Date().toLocaleString();
 
         let positionMessage = `<b>📈 持仓状态报告</b> (${executionTime})\n\n`;
+        let totalProfit = 0; // 新增：总利润计数器
 
         if (positions.length === 0) {
             positionMessage += '当前无持仓\n';
         } else {
             for (const position of positions) {
                 if (position.pos !== '0') {
+                    const profit = Number(position.upl);
+                    totalProfit += profit; // 累加每个持仓的利润
+
                     positionMessage += `<b>🔹 ${position.instId.replace('-USDT-SWAP', '')}</b> | ` +
                         `${position.posSide === 'long' ? '多🟢' : '空🔴'} | ` +
                         `${Number(position.avgPx).toFixed(2)} | ` +
-                        `利润: ${Number(position.upl).toFixed(2)}\n`;
+                        `利润: ${profit.toFixed(2)}\n`;
                 }
             }
+
+            // 在所有持仓信息后添加总计
+            positionMessage += `\n<b>💰 总计利润: ${totalProfit > 0 ? '+' : ''}${totalProfit.toFixed(2)} USDT</b>`;
         }
 
         console.log(positionMessage);
