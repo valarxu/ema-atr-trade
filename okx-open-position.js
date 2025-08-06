@@ -45,14 +45,14 @@ function calculateContractSize(instrumentInfo, currentPrice, positionUSDT) {
     return contractSize.toFixed(instrumentInfo.lotSz.split('.')[1].length);
 }
 
-async function placeOrder(symbol = 'BTC-USDT-SWAP', currentPrice = 65000, posSide = 'long') {
+async function placeOrder(symbol = 'BTC-USDT-SWAP', currentPrice = 65000, posSide = 'long', customPositionUSDT = null) {
     const instrumentInfo = getInstrumentInfo(symbol);
     if (!instrumentInfo) {
         throw new Error('不支持的交易对');
     }
 
-    // 获取对应交易对的仓位价值
-    const positionValue = POSITION_USDT[symbol] || 1000; // 默认使用1000 USDT
+    // 获取对应交易对的仓位价值，优先使用传入的自定义金额
+    const positionValue = customPositionUSDT || POSITION_USDT[symbol] || 1000; // 默认使用1000 USDT
     const contractSize = calculateContractSize(instrumentInfo, currentPrice, positionValue);
     
     console.log(`预期开仓价值: ${positionValue} USDT`);

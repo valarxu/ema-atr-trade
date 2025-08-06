@@ -9,6 +9,19 @@ const { placeOrder } = require('./okx-open-position');
 const { closePosition } = require('./okx-close-position');
 const { getPositions } = require('./okx-get-positions');
 
+// 导入合约信息常量
+const {
+    POSITION_USDT
+} = require('./okx-instrumentInfo_const.js');
+
+// 动态开仓金额配置（初始值来自POSITION_USDT）
+const dynamicPositionUSDT = {
+    'BTC-USDT-SWAP': POSITION_USDT['BTC-USDT-SWAP'],
+    'ETH-USDT-SWAP': POSITION_USDT['ETH-USDT-SWAP'],
+    'SOL-USDT-SWAP': POSITION_USDT['SOL-USDT-SWAP'],
+    'ADA-USDT-SWAP': POSITION_USDT['ADA-USDT-SWAP']
+};
+
 // 定义要监控的交易对
 const TRADING_PAIRS = [
     'BTC-USDT',
@@ -117,13 +130,13 @@ async function processSymbol(symbol) {
         if (positionState[symbol] === 0) {
             if (previousClose > historicalEMA120 && priceDistance > atrMultiplier) {
                 // 尝试开多仓
-                await placeOrder(swapSymbol, previousClose, 'long');
+                await placeOrder(swapSymbol, previousClose, 'long', dynamicPositionUSDT[swapSymbol]);
                 // 开仓成功后再更新状态
                 positionState[symbol] = 1;
                 tradeAction = logTrade(symbol, '开多🟢', previousClose, `价格在EMA之上，距离${priceDistance.toFixed(2)}个ATR`);
             } else if (previousClose < historicalEMA120 && priceDistance < -atrMultiplier && !ignoreShortSignals[symbol]) {
                 // 新增: 仅在不忽略做空信号时尝试开空仓
-                await placeOrder(swapSymbol, previousClose, 'short');
+                await placeOrder(swapSymbol, previousClose, 'short', dynamicPositionUSDT[swapSymbol]);
                 // 开仓成功后再更新状态
                 positionState[symbol] = -1;
                 tradeAction = logTrade(symbol, '开空🔴', previousClose, `价格在EMA之下，距离${priceDistance.toFixed(2)}个ATR`);
@@ -147,7 +160,7 @@ async function processSymbol(symbol) {
                 // 使用新数据评估开仓条件
                 if (newCurrentClose < newHistoricalEMA120 && newPriceDistance < -atrMultiplier && !ignoreShortSignals[symbol]) {
                     // 尝试开空仓
-                    await placeOrder(swapSymbol, newCurrentClose, 'short');
+                    await placeOrder(swapSymbol, newCurrentClose, 'short', dynamicPositionUSDT[swapSymbol]);
                     positionState[symbol] = -1;
                     tradeAction = logTrade(symbol, '开空🔴', newCurrentClose, `平多后价格在EMA之下，距离${newPriceDistance.toFixed(2)}个ATR`);
                 }
@@ -174,7 +187,7 @@ async function processSymbol(symbol) {
                     // 使用新数据评估开仓条件
                     if (newCurrentClose > newHistoricalEMA120 && newPriceDistance > atrMultiplier) {
                         // 尝试开多仓
-                        await placeOrder(swapSymbol, newCurrentClose, 'long');
+                        await placeOrder(swapSymbol, newCurrentClose, 'long', dynamicPositionUSDT[swapSymbol]);
                         positionState[symbol] = 1;
                         ignoreShortSignals[symbol] = false; // 重置忽略做空信号状态
                         tradeAction = logTrade(symbol, '开多🟢', newCurrentClose, `平空后价格在EMA之上，距离${newPriceDistance.toFixed(2)}个ATR`);
@@ -199,7 +212,7 @@ async function processSymbol(symbol) {
                     // 使用新数据评估开仓条件
                     if (newCurrentClose > newHistoricalEMA120 && newPriceDistance > atrMultiplier) {
                         // 尝试开多仓
-                        await placeOrder(swapSymbol, newCurrentClose, 'long');
+                        await placeOrder(swapSymbol, newCurrentClose, 'long', dynamicPositionUSDT[swapSymbol]);
                         positionState[symbol] = 1;
                         tradeAction = logTrade(symbol, '开多🟢', newCurrentClose, `平空后价格在EMA之上，距离${newPriceDistance.toFixed(2)}个ATR`);
                     }
@@ -332,6 +345,11 @@ function processTelegramCommand(command) {
 /状态 - 查看所有交易对的启用/禁用状态
 /忽略空信号 BTC-USDT - 手动设置忽略指定交易对的做空信号
 /重置空信号 BTC-USDT - 重置指定交易对的忽略做空信号标志
+
+<b>开仓金额管理命令:</b>
+/查看金额 - 查看所有交易对的开仓金额
+/设置金额 BTC-USDT 5000 - 设置指定交易对的开仓金额(USDT)
+/重置金额 BTC-USDT - 重置指定交易对的开仓金额为初始值
 /帮助 - 显示此帮助信息`;
     } else if (action === '/状态') {
         // 返回所有交易对的状态
@@ -352,6 +370,17 @@ function processTelegramCommand(command) {
             tradingEnabled[pair] = false;
         }
         return '已禁用所有交易对';
+    } else if (action === '/查看金额') {
+        // 查看所有交易对的开仓金额
+        let amountMessage = '📊 <b>开仓金额配置:</b>\n';
+        for (const pair of TRADING_PAIRS) {
+            const swapPair = `${pair}-SWAP`;
+            const currentAmount = dynamicPositionUSDT[swapPair];
+            const initialAmount = POSITION_USDT[swapPair];
+            const isModified = currentAmount !== initialAmount;
+            amountMessage += `${pair}: ${currentAmount} USDT${isModified ? ' (已修改✏️)' : ' (初始值)'}\n`;
+        }
+        return amountMessage;
     }
     
     // 处理需要参数的命令
@@ -399,6 +428,29 @@ function processTelegramCommand(command) {
         // 重置指定交易对的忽略做空信号标志
         ignoreShortSignals[symbol] = false;
         return `已重置 ${symbol} 的忽略做空信号标志`;
+    } else if (action === '/设置金额') {
+        // 设置指定交易对的开仓金额
+        if (parts.length < 3) {
+            return '命令格式错误。正确格式: /设置金额 BTC-USDT 5000';
+        }
+        const amount = parseFloat(parts[2]);
+        if (isNaN(amount) || amount <= 0) {
+            return '金额必须是大于0的数字';
+        }
+        if (amount > 50000) {
+            return '为了安全考虑，单次开仓金额不能超过50000 USDT';
+        }
+        const swapSymbol = `${symbol}-SWAP`;
+        const oldAmount = dynamicPositionUSDT[swapSymbol];
+        dynamicPositionUSDT[swapSymbol] = amount;
+        return `已设置 ${symbol} 的开仓金额从 ${oldAmount} USDT 修改为 ${amount} USDT`;
+    } else if (action === '/重置金额') {
+        // 重置指定交易对的开仓金额为初始值
+        const swapSymbol = `${symbol}-SWAP`;
+        const oldAmount = dynamicPositionUSDT[swapSymbol];
+        const initialAmount = POSITION_USDT[swapSymbol];
+        dynamicPositionUSDT[swapSymbol] = initialAmount;
+        return `已重置 ${symbol} 的开仓金额从 ${oldAmount} USDT 恢复为初始值 ${initialAmount} USDT`;
     } else {
         return '未知命令。发送 /帮助 查看所有可用命令';
     }
