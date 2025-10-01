@@ -471,7 +471,7 @@ async function startup() {
             await fetchAndCalculate();
 
             // 设置K线数据获取和策略执行的定时任务
-            cron.schedule('10 0 0,4,8,12,16,20 * * *', fetchAndCalculate, {
+            cron.schedule('15 0 0,4,8,12,16,20 * * *', fetchAndCalculate, {
                 timezone: "Asia/Shanghai"
             });
 
