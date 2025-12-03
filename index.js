@@ -104,6 +104,11 @@ async function processSymbol(symbol) {
     try {
         const swapSymbol = `${symbol}-SWAP`;
         const { closingPrices, highs, lows, currentClose } = await fetchKlines(swapSymbol);
+        if (!Array.isArray(closingPrices) || !Array.isArray(highs) || !Array.isArray(lows)) {
+            console.error(`数据结构异常: ${swapSymbol} close/high/low 不是数组`);
+            throw new Error(`${swapSymbol} K线解析失败: 数组为空`);
+        }
+        console.log(`收到${swapSymbol} 数据长度: close=${closingPrices.length}, high=${highs.length}, low=${lows.length}, currentClose=${currentClose}`);
 
         const historicalEMA120 = calculateEMA(closingPrices, 120);
         const historicalATR14 = calculateATR(highs, lows, closingPrices, 14);
@@ -164,6 +169,7 @@ async function processSymbol(symbol) {
             // 平仓后重新获取最新数据并评估开仓条件
             try {
                 const { closingPrices: newClosingPrices, highs: newHighs, lows: newLows, currentClose: newCurrentClose } = await fetchKlines(swapSymbol);
+                console.log(`平多后复取${swapSymbol} 长度: close=${newClosingPrices.length}, high=${newHighs.length}, low=${newLows.length}, currentClose=${newCurrentClose}`);
                 const newHistoricalEMA120 = calculateEMA(newClosingPrices, 120);
                 const newHistoricalATR14 = calculateATR(newHighs, newLows, newClosingPrices, 14);
                 const newPriceDistance = (newCurrentClose - newHistoricalEMA120) / newHistoricalATR14;
@@ -191,6 +197,7 @@ async function processSymbol(symbol) {
                 // 平仓后重新获取最新数据并评估开仓条件
                 try {
                     const { closingPrices: newClosingPrices, highs: newHighs, lows: newLows, currentClose: newCurrentClose } = await fetchKlines(swapSymbol);
+                    console.log(`平空止盈后复取${swapSymbol} 长度: close=${newClosingPrices.length}, high=${newHighs.length}, low=${newLows.length}, currentClose=${newCurrentClose}`);
                     const newHistoricalEMA120 = calculateEMA(newClosingPrices, 120);
                     const newHistoricalATR14 = calculateATR(newHighs, newLows, newClosingPrices, 14);
                     const newPriceDistance = (newCurrentClose - newHistoricalEMA120) / newHistoricalATR14;
@@ -216,6 +223,7 @@ async function processSymbol(symbol) {
                 // 平仓后重新获取最新数据并评估开仓条件
                 try {
                     const { closingPrices: newClosingPrices, highs: newHighs, lows: newLows, currentClose: newCurrentClose } = await fetchKlines(swapSymbol);
+                    console.log(`平空EMA后复取${swapSymbol} 长度: close=${newClosingPrices.length}, high=${newHighs.length}, low=${newLows.length}, currentClose=${newCurrentClose}`);
                     const newHistoricalEMA120 = calculateEMA(newClosingPrices, 120);
                     const newHistoricalATR14 = calculateATR(newHighs, newLows, newClosingPrices, 14);
                     const newPriceDistance = (newCurrentClose - newHistoricalEMA120) / newHistoricalATR14;
