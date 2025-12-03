@@ -30,11 +30,29 @@ const ADA_USDT_SWAP = {
     minSz: '0.1',
 };
 
+const HYPE_USDT_SWAP = {
+    instId: 'HYPE-USDT-SWAP',
+    ctVal: '0.1',
+    ctValCcy: 'HYPE',
+    lotSz: '1',
+    minSz: '1',
+};
+
+const SUI_USDT_SWAP = {
+    instId: 'SUI-USDT-SWAP',
+    ctVal: '1',
+    ctValCcy: 'SUI',
+    lotSz: '1',
+    minSz: '1',
+};
+
 const POSITION_USDT = {
-    'BTC-USDT-SWAP': 10000,
-    'ETH-USDT-SWAP': 8000,
-    'SOL-USDT-SWAP': 6000,
-    'ADA-USDT-SWAP': 4000
+    'BTC-USDT-SWAP': 7500,
+    'ETH-USDT-SWAP': 7500,
+    'SOL-USDT-SWAP': 5000,
+    'ADA-USDT-SWAP': 5000,
+    'HYPE-USDT-SWAP': 5000,
+    'SUI-USDT-SWAP': 5000,
 };
 
 // 导出所有常量
@@ -43,5 +61,7 @@ module.exports = {
     ETH_USDT_SWAP,
     SOL_USDT_SWAP,
     ADA_USDT_SWAP,
+    HYPE_USDT_SWAP,
+    SUI_USDT_SWAP,
     POSITION_USDT
 };

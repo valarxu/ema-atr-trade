@@ -19,7 +19,9 @@ const dynamicPositionUSDT = {
     'BTC-USDT-SWAP': POSITION_USDT['BTC-USDT-SWAP'],
     'ETH-USDT-SWAP': POSITION_USDT['ETH-USDT-SWAP'],
     'SOL-USDT-SWAP': POSITION_USDT['SOL-USDT-SWAP'],
-    'ADA-USDT-SWAP': POSITION_USDT['ADA-USDT-SWAP']
+    'ADA-USDT-SWAP': POSITION_USDT['ADA-USDT-SWAP'],
+    'HYPE-USDT-SWAP': POSITION_USDT['HYPE-USDT-SWAP'],
+    'SUI-USDT-SWAP': POSITION_USDT['SUI-USDT-SWAP'],
 };
 
 // 定义要监控的交易对
@@ -27,7 +29,9 @@ const TRADING_PAIRS = [
     'BTC-USDT',
     'ETH-USDT',
     'SOL-USDT',
-    'ADA-USDT'
+    'ADA-USDT',
+    'HYPE-USDT',
+    'SUI-USDT'
 ];
 
 // 将现货交易对转换为合约交易对
@@ -38,7 +42,9 @@ const positionState = {
     'BTC-USDT': 0,
     'ETH-USDT': 0,
     'SOL-USDT': 0,
-    'ADA-USDT': 0
+    'ADA-USDT': 0,
+    'HYPE-USDT': 0,
+    'SUI-USDT': 0,
 };
 
 // 为每个交易对维护交易启用状态（默认全部关闭）
@@ -46,7 +52,9 @@ const tradingEnabled = {
     'BTC-USDT': false,
     'ETH-USDT': false,
     'SOL-USDT': false,
-    'ADA-USDT': false
+    'ADA-USDT': false,
+    'HYPE-USDT': false,
+    'SUI-USDT': false,
 };
 
 // 新增: 为每个交易对维护是否忽略做空信号的状态
@@ -54,7 +62,9 @@ const ignoreShortSignals = {
     'BTC-USDT': false,
     'ETH-USDT': false,
     'SOL-USDT': false,
-    'ADA-USDT': false
+    'ADA-USDT': false,
+    'HYPE-USDT': false,
+    'SUI-USDT': false,
 };
 
 // 策略参数
