@@ -46,7 +46,9 @@ function calculateContractSize(instrumentInfo, currentPrice, positionUSDT) {
     }
     
     // 格式化数字，避免浮点数精度问题
-    return contractSize.toFixed(instrumentInfo.lotSz.split('.')[1].length);
+    const lotSzStr = String(instrumentInfo.lotSz);
+    const decimals = lotSzStr.includes('.') ? lotSzStr.split('.')[1].length : 0;
+    return contractSize.toFixed(decimals);
 }
 
 async function placeOrder(symbol = 'BTC-USDT-SWAP', currentPrice = 65000, posSide = 'long', customPositionUSDT = null) {

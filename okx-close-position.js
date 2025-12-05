@@ -16,6 +16,9 @@ async function closePosition(instId) {
     for (const position of positions) {
         if (position.pos === '0') continue; // 跳过空仓位
         
+        const rawPos = String(position.pos);
+        const szStr = rawPos.startsWith('-') ? rawPos.slice(1) : rawPos; // 保留交易所返回的小数精度
+
         const timestamp = new Date().toISOString();
         const method = 'POST';
         const requestPath = '/api/v5/trade/order';
@@ -26,7 +29,7 @@ async function closePosition(instId) {
             tdMode: 'isolated',
             side: position.posSide === 'long' ? 'sell' : 'buy',  // 持多仓就卖出，持空仓就买入
             ordType: 'market',
-            sz: Math.abs(parseFloat(position.pos)).toString(),    // 确保数量为正数
+            sz: szStr,    // 使用交易所返回的精度，去掉负号
             posSide: position.posSide
         };
 
