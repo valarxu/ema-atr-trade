@@ -91,6 +91,151 @@ const atrMultiplier = 1.5;
 // 新增: 做空止盈ATR倍数
 const shortTakeProfitAtrMultiplier = 5.0;
 
+// ==========================================
+// Helper Functions (Refactored)
+// ==========================================
+
+/**
+ * 获取市场数据并计算指标
+ */
+async function getMarketAnalysis(symbol) {
+    const swapSymbol = `${symbol}-SWAP`;
+    const { closingPrices, highs, lows, currentClose } = await fetchKlines(swapSymbol);
+    
+    if (!Array.isArray(closingPrices) || !Array.isArray(highs) || !Array.isArray(lows)) {
+        console.error(`数据结构异常: ${swapSymbol} close/high/low 不是数组`);
+        throw new Error(`${swapSymbol} K线解析失败: 数组为空`);
+    }
+    
+    const historicalEMA120 = calculateEMA(closingPrices, 120);
+    const historicalATR60 = calculateATR(highs, lows, closingPrices, 60);
+    const previousClose = closingPrices[closingPrices.length - 1];
+    const priceDistance = (previousClose - historicalEMA120) / historicalATR60;
+
+    return {
+        symbol,
+        swapSymbol,
+        closingPrices,
+        highs,
+        lows,
+        currentClose,
+        previousClose,
+        historicalEMA120,
+        historicalATR60,
+        priceDistance
+    };
+}
+
+/**
+ * 执行平仓逻辑，包含日志记录和状态重置
+ */
+async function executeClosePosition(symbol, exitPrice, reason) {
+    const swapSymbol = `${symbol}-SWAP`;
+    const prePositions = await getPositions([swapSymbol]);
+    await closePosition(swapSymbol);
+    
+    const previousState = positionState[symbol];
+    positionState[symbol] = 0;
+    
+    // 重置多单相关状态
+    longEntryPrice[symbol] = null;
+    longAddedHalfOnce[symbol] = false;
+
+    // 记录主要交易日志
+    // 自动推断方向：如果之前是1(多)则平多，-1(空)则平空
+    let actionType = '平多🔵';
+    if (previousState === -1) actionType = '平空🔵';
+    
+    const tradeAction = logTrade(symbol, actionType, exitPrice, reason);
+
+    // 记录详细平仓汇总
+    for (const p of prePositions) {
+        if (p.pos !== '0') {
+            logCloseSummary({
+                symbol: symbol,
+                side: p.posSide === 'long' ? '多' : '空',
+                entryPrice: Number(p.avgPx),
+                exitPrice: exitPrice,
+                quantity: String(p.pos).startsWith('-') ? String(p.pos).slice(1) : String(p.pos),
+                pnl: Number(p.upl),
+                reason: reason
+            });
+        }
+    }
+    return tradeAction;
+}
+
+/**
+ * 尝试开仓逻辑
+ * @param {Object} marketData - getMarketAnalysis 返回的数据对象
+ * @param {string} checkType - 'checkLong' | 'checkShort' | 'both'
+ * @param {string} logPrefix - 日志前缀 (如 "平多后")
+ * @param {boolean} useCurrentPrice - 是否使用当前价格(currentClose)而不是收盘价(previousClose)
+ */
+async function attemptOpenPosition(marketData, checkType = 'both', logPrefix = '', useCurrentPrice = false) {
+    const { symbol, swapSymbol, currentClose, previousClose, historicalEMA120, historicalATR60 } = marketData;
+    
+    // 根据场景决定使用收盘价还是当前价
+    const priceToCheck = useCurrentPrice ? currentClose : previousClose;
+    
+    // 重新计算距离 (因为可能使用 currentClose)
+    const distance = (priceToCheck - historicalEMA120) / historicalATR60;
+    
+    let action = null;
+    
+    // 开多条件
+    if ((checkType === 'both' || checkType === 'checkLong') && 
+        priceToCheck > historicalEMA120 && 
+        distance > atrMultiplier) {
+            
+        await placeOrder(swapSymbol, priceToCheck, 'long', dynamicPositionUSDT[swapSymbol]);
+        positionState[symbol] = 1;
+        longEntryPrice[symbol] = priceToCheck;
+        longAddedHalfOnce[symbol] = false;
+        
+        // 如果是从忽略做空状态恢复，这里不需要显式重置，因为外面 processSymbol 会处理，或者这里也可以处理
+        // 原逻辑中开多会自然覆盖状态
+        action = logTrade(symbol, '开多🟢', priceToCheck, `${logPrefix}价格在EMA之上，距离${distance.toFixed(2)}个ATR`);
+    }
+    // 开空条件
+    else if ((checkType === 'both' || checkType === 'checkShort') && 
+             priceToCheck < historicalEMA120 && 
+             distance < -atrMultiplier && 
+             !ignoreShortSignals[symbol] && 
+             !longOnly[symbol]) {
+                 
+        await placeOrder(swapSymbol, priceToCheck, 'short', dynamicPositionUSDT[swapSymbol]);
+        positionState[symbol] = -1;
+        action = logTrade(symbol, '开空🔴', priceToCheck, `${logPrefix}价格在EMA之下，距离${distance.toFixed(2)}个ATR`);
+    }
+    
+    return action;
+}
+
+/**
+ * 平仓后重新获取数据并尝试反向开仓
+ * 这是原代码中重复率最高的模式
+ */
+async function reevaluateAfterClose(symbol, nextCheckType, logReason) {
+    try {
+        const marketData = await getMarketAnalysis(symbol);
+        const { closingPrices, highs, lows, currentClose } = marketData;
+        
+        console.log(`${logReason}复取${symbol}-SWAP 长度: close=${closingPrices.length}, high=${highs.length}, low=${lows.length}, currentClose=${currentClose}`);
+        
+        // 注意：原逻辑在平仓后使用的是 currentClose 进行判断，而不是 previousClose
+        return await attemptOpenPosition(marketData, nextCheckType, logReason, true);
+        
+    } catch (error) {
+        console.error(`${logReason}重新评估开仓条件时出错: ${error.message}`);
+        return null;
+    }
+}
+
+// ==========================================
+// Main Logic
+// ==========================================
+
 // 初始化持仓状态
 async function initializePositionState() {
     try {
@@ -121,24 +266,17 @@ async function initializePositionState() {
 
 async function processSymbol(symbol) {
     try {
-        const swapSymbol = `${symbol}-SWAP`;
-        const { closingPrices, highs, lows, currentClose } = await fetchKlines(swapSymbol);
-        if (!Array.isArray(closingPrices) || !Array.isArray(highs) || !Array.isArray(lows)) {
-            console.error(`数据结构异常: ${swapSymbol} close/high/low 不是数组`);
-            throw new Error(`${swapSymbol} K线解析失败: 数组为空`);
-        }
-        console.log(`收到${swapSymbol} 数据长度: close=${closingPrices.length}, high=${highs.length}, low=${lows.length}, currentClose=${currentClose}`);
+        // 1. 获取市场数据
+        const marketData = await getMarketAnalysis(symbol);
+        const { 
+            currentClose, previousClose, historicalEMA120, historicalATR60, priceDistance, swapSymbol 
+        } = marketData;
 
-        const historicalEMA120 = calculateEMA(closingPrices, 120);
-        const historicalATR60 = calculateATR(highs, lows, closingPrices, 60);
-        const previousClose = closingPrices[closingPrices.length - 1];
-
-        const priceDistance = (previousClose - historicalEMA120) / historicalATR60;
+        console.log(`收到${swapSymbol} 数据长度: close=${marketData.closingPrices.length}, high=${marketData.highs.length}, low=${marketData.lows.length}, currentClose=${currentClose}`);
 
         let tradeAction = '无';
-        
 
-        // 检查该交易对是否允许交易
+        // 2. 检查该交易对是否允许交易
         if (!tradingEnabled[symbol]) {
             console.log(`${symbol}交易已禁用，跳过交易信号执行`);
             return {
@@ -156,52 +294,31 @@ async function processSymbol(symbol) {
             };
         }
 
-        // 新增: 检查是否应该重置忽略做空信号的状态
+        // 3. 检查是否应该重置忽略做空信号的状态
         if (previousClose > historicalEMA120 && ignoreShortSignals[symbol]) {
             ignoreShortSignals[symbol] = false;
             console.log(`${symbol} 价格回到EMA上方，重置忽略做空信号标志`);
         }
 
-        // 开仓信号
+        // 4. 状态机逻辑
+        // 空仓状态 (0)
         if (positionState[symbol] === 0) {
-            if (previousClose > historicalEMA120 && priceDistance > atrMultiplier) {
-                // 尝试开多仓
-                await placeOrder(swapSymbol, previousClose, 'long', dynamicPositionUSDT[swapSymbol]);
-                // 开仓成功后再更新状态
-                positionState[symbol] = 1;
-                longEntryPrice[symbol] = previousClose;
-                longAddedHalfOnce[symbol] = false;
-                tradeAction = logTrade(symbol, '开多🟢', previousClose, `价格在EMA之上，距离${priceDistance.toFixed(2)}个ATR`);
-            } else if (previousClose < historicalEMA120 && priceDistance < -atrMultiplier && !ignoreShortSignals[symbol] && !longOnly[symbol]) {
-                // 新增: 仅在不忽略做空信号时尝试开空仓
-                await placeOrder(swapSymbol, previousClose, 'short', dynamicPositionUSDT[swapSymbol]);
-                // 开仓成功后再更新状态
-                positionState[symbol] = -1;
-                tradeAction = logTrade(symbol, '开空🔴', previousClose, `价格在EMA之下，距离${priceDistance.toFixed(2)}个ATR`);
-            }
+            // 尝试开仓 (同时检查多空)
+            const action = await attemptOpenPosition(marketData, 'both', '', false);
+            if (action) tradeAction = action;
         }
+        // 持多仓状态 (1)
         else if (positionState[symbol] === 1) {
+            // 平仓条件: 价格跌破EMA
             if (previousClose < historicalEMA120) {
-                const prePositions = await getPositions([swapSymbol]);
-                await closePosition(swapSymbol);
-                positionState[symbol] = 0;
-                tradeAction = logTrade(symbol, '平多🔵', previousClose, '价格跌破EMA');
-                for (const p of prePositions) {
-                    if (p.pos !== '0') {
-                        logCloseSummary({
-                            symbol: p.instId.replace('-USDT-SWAP', ''),
-                            side: '多',
-                            entryPrice: Number(p.avgPx),
-                            exitPrice: previousClose,
-                            quantity: String(p.pos).startsWith('-') ? String(p.pos).slice(1) : String(p.pos),
-                            pnl: Number(p.upl),
-                            reason: '价格跌破EMA'
-                        });
-                    }
-                }
-                longEntryPrice[symbol] = null;
-                longAddedHalfOnce[symbol] = false;
-            } else {
+                tradeAction = await executeClosePosition(symbol, previousClose, '价格跌破EMA');
+                
+                // 平多后检查是否开空
+                const reAction = await reevaluateAfterClose(symbol, 'checkShort', '平多后');
+                if (reAction) tradeAction = reAction; // 更新最新的动作
+            } 
+            // 加仓逻辑
+            else {
                 if (!longAddedHalfOnce[symbol] && longEntryPrice[symbol] != null && currentClose > (longEntryPrice[symbol] + 5 * historicalATR60)) {
                     const halfAmount = (dynamicPositionUSDT[swapSymbol] || 0) / 2;
                     if (halfAmount > 0) {
@@ -211,147 +328,43 @@ async function processSymbol(symbol) {
                     }
                 }
             }
-
-            // 平仓后重新获取最新数据并评估开仓条件
-            try {
-                const { closingPrices: newClosingPrices, highs: newHighs, lows: newLows, currentClose: newCurrentClose } = await fetchKlines(swapSymbol);
-                console.log(`平多后复取${swapSymbol} 长度: close=${newClosingPrices.length}, high=${newHighs.length}, low=${newLows.length}, currentClose=${newCurrentClose}`);
-                const newHistoricalEMA120 = calculateEMA(newClosingPrices, 120);
-                const newHistoricalATR60 = calculateATR(newHighs, newLows, newClosingPrices, 60);
-                const newPriceDistance = (newCurrentClose - newHistoricalEMA120) / newHistoricalATR60;
-
-                // 使用新数据评估开仓条件
-                if (newCurrentClose < newHistoricalEMA120 && newPriceDistance < -atrMultiplier && !ignoreShortSignals[symbol] && !longOnly[symbol]) {
-                    // 尝试开空仓
-                    await placeOrder(swapSymbol, newCurrentClose, 'short', dynamicPositionUSDT[swapSymbol]);
-                    positionState[symbol] = -1;
-                    tradeAction = logTrade(symbol, '开空🔴', newCurrentClose, `平多后价格在EMA之下，距离${newPriceDistance.toFixed(2)}个ATR`);
-                }
-            } catch (error) {
-                console.error(`平多后重新评估开仓条件时出错: ${error.message}`);
-            }
         }
+        // 持空仓状态 (-1)
         else if (positionState[symbol] === -1) {
+            let shouldClose = false;
+            let closeReason = '';
+            let nextCheck = 'checkLong'; // 默认平空后查多
+            let logPrefix = '';
+
+            // 优先检查只做多模式
             if (longOnly[symbol]) {
-                const prePositions = await getPositions([swapSymbol]);
-                await closePosition(swapSymbol);
-                positionState[symbol] = 0;
-                tradeAction = logTrade(symbol, '平空🔵', previousClose, '只做多模式关闭空仓');
-                for (const p of prePositions) {
-                    if (p.pos !== '0') {
-                        logCloseSummary({
-                            symbol: p.instId.replace('-USDT-SWAP', ''),
-                            side: '空',
-                            entryPrice: Number(p.avgPx),
-                            exitPrice: previousClose,
-                            quantity: String(p.pos).startsWith('-') ? String(p.pos).slice(1) : String(p.pos),
-                            pnl: Number(p.upl),
-                            reason: '只做多关闭空仓'
-                        });
-                    }
-                }
-                try {
-                    const { closingPrices: newClosingPrices, highs: newHighs, lows: newLows, currentClose: newCurrentClose } = await fetchKlines(swapSymbol);
-                    console.log(`只做多平空后复取${swapSymbol} 长度: close=${newClosingPrices.length}, high=${newHighs.length}, low=${newLows.length}, currentClose=${newCurrentClose}`);
-                    const newHistoricalEMA120 = calculateEMA(newClosingPrices, 120);
-                    const newHistoricalATR60 = calculateATR(newHighs, newLows, newClosingPrices, 60);
-                    const newPriceDistance = (newCurrentClose - newHistoricalEMA120) / newHistoricalATR60;
-                    if (newCurrentClose > newHistoricalEMA120 && newPriceDistance > atrMultiplier) {
-                        await placeOrder(swapSymbol, newCurrentClose, 'long', dynamicPositionUSDT[swapSymbol]);
-                        positionState[symbol] = 1;
-                        longEntryPrice[symbol] = newCurrentClose;
-                        longAddedHalfOnce[symbol] = false;
-                        tradeAction = logTrade(symbol, '开多🟢', newCurrentClose, `平空后价格在EMA之上，距离${newPriceDistance.toFixed(2)}个ATR`);
-                    }
-                } catch (error) {
-                    console.error(`只做多模式平空后重新评估开仓条件时出错: ${error.message}`);
-                }
-            } else {
-            // 新增: 做空止盈条件
-            if (priceDistance < -shortTakeProfitAtrMultiplier) {
-                // 做空止盈
-                const prePositions = await getPositions([swapSymbol]);
-                await closePosition(swapSymbol);
-                positionState[symbol] = 0;
-                ignoreShortSignals[symbol] = true; // 设置忽略做空信号
-                tradeAction = logTrade(symbol, '平空🔵', previousClose, `做空止盈触发，价格偏离${priceDistance.toFixed(2)}个ATR`);
-                for (const p of prePositions) {
-                    if (p.pos !== '0') {
-                        logCloseSummary({
-                            symbol: p.instId.replace('-USDT-SWAP', ''),
-                            side: '空',
-                            entryPrice: Number(p.avgPx),
-                            exitPrice: previousClose,
-                            quantity: String(p.pos).startsWith('-') ? String(p.pos).slice(1) : String(p.pos),
-                            pnl: Number(p.upl),
-                            reason: `做空止盈偏离${priceDistance.toFixed(2)}ATR`
-                        });
-                    }
-                }
-
-                // 平仓后重新获取最新数据并评估开仓条件
-                try {
-                    const { closingPrices: newClosingPrices, highs: newHighs, lows: newLows, currentClose: newCurrentClose } = await fetchKlines(swapSymbol);
-                    console.log(`平空止盈后复取${swapSymbol} 长度: close=${newClosingPrices.length}, high=${newHighs.length}, low=${newLows.length}, currentClose=${newCurrentClose}`);
-                    const newHistoricalEMA120 = calculateEMA(newClosingPrices, 120);
-                    const newHistoricalATR60 = calculateATR(newHighs, newLows, newClosingPrices, 60);
-                    const newPriceDistance = (newCurrentClose - newHistoricalEMA120) / newHistoricalATR60;
-
-                    // 使用新数据评估开仓条件
-                    if (newCurrentClose > newHistoricalEMA120 && newPriceDistance > atrMultiplier) {
-                        // 尝试开多仓
-                        await placeOrder(swapSymbol, newCurrentClose, 'long', dynamicPositionUSDT[swapSymbol]);
-                        positionState[symbol] = 1;
-                        ignoreShortSignals[symbol] = false; // 重置忽略做空信号状态
-                        longEntryPrice[symbol] = newCurrentClose;
-                        longAddedHalfOnce[symbol] = false;
-                        tradeAction = logTrade(symbol, '开多🟢', newCurrentClose, `平空后价格在EMA之上，距离${newPriceDistance.toFixed(2)}个ATR`);
-                    }
-                } catch (error) {
-                    console.error(`平空后重新评估开仓条件时出错: ${error.message}`);
-                }
+                shouldClose = true;
+                closeReason = '只做多模式关闭空仓';
+                logPrefix = '只做多平空后';
+            } 
+            // 检查止盈条件
+            else if (priceDistance < -shortTakeProfitAtrMultiplier) {
+                shouldClose = true;
+                closeReason = `做空止盈触发，价格偏离${priceDistance.toFixed(2)}个ATR`; 
+                
+                // 特殊逻辑：止盈后设置忽略做空
+                ignoreShortSignals[symbol] = true; 
+                logPrefix = '平空止盈后';
             }
-            // 原始平空条件
+            // 检查常规平仓条件 (突破EMA)
             else if (previousClose > historicalEMA120) {
-                const prePositions = await getPositions([swapSymbol]);
-                await closePosition(swapSymbol);
-                positionState[symbol] = 0;
-                tradeAction = logTrade(symbol, '平空🔵', previousClose, '价格突破EMA');
-                for (const p of prePositions) {
-                    if (p.pos !== '0') {
-                        logCloseSummary({
-                            symbol: p.instId.replace('-USDT-SWAP', ''),
-                            side: '空',
-                            entryPrice: Number(p.avgPx),
-                            exitPrice: previousClose,
-                            quantity: String(p.pos).startsWith('-') ? String(p.pos).slice(1) : String(p.pos),
-                            pnl: Number(p.upl),
-                            reason: '价格突破EMA'
-                        });
-                    }
-                }
-
-                // 平仓后重新获取最新数据并评估开仓条件
-                try {
-                    const { closingPrices: newClosingPrices, highs: newHighs, lows: newLows, currentClose: newCurrentClose } = await fetchKlines(swapSymbol);
-                    console.log(`平空EMA后复取${swapSymbol} 长度: close=${newClosingPrices.length}, high=${newHighs.length}, low=${newLows.length}, currentClose=${newCurrentClose}`);
-                    const newHistoricalEMA120 = calculateEMA(newClosingPrices, 120);
-                    const newHistoricalATR60 = calculateATR(newHighs, newLows, newClosingPrices, 60);
-                    const newPriceDistance = (newCurrentClose - newHistoricalEMA120) / newHistoricalATR60;
-
-                    // 使用新数据评估开仓条件
-                    if (newCurrentClose > newHistoricalEMA120 && newPriceDistance > atrMultiplier) {
-                        // 尝试开多仓
-                        await placeOrder(swapSymbol, newCurrentClose, 'long', dynamicPositionUSDT[swapSymbol]);
-                        positionState[symbol] = 1;
-                        longEntryPrice[symbol] = newCurrentClose;
-                        longAddedHalfOnce[symbol] = false;
-                        tradeAction = logTrade(symbol, '开多🟢', newCurrentClose, `平空后价格在EMA之上，距离${newPriceDistance.toFixed(2)}个ATR`);
-                    }
-                } catch (error) {
-                    console.error(`平空后重新评估开仓条件时出错: ${error.message}`);
-                }
+                shouldClose = true;
+                closeReason = '价格突破EMA';
+                logPrefix = '平空EMA后';
             }
+
+            if (shouldClose) {
+                tradeAction = await executeClosePosition(symbol, previousClose, closeReason);
+                
+                // 平空后检查是否开多
+                const reAction = await reevaluateAfterClose(symbol, 'checkLong', logPrefix);
+                
+                if (reAction) tradeAction = reAction;
             }
         }
 
@@ -583,34 +596,19 @@ function processTelegramCommand(command) {
         if (positionState[symbol] === -1) {
             setTimeout(async () => {
                 try {
-                    const swapSymbol = `${symbol}-SWAP`;
-                    const prePositions = await getPositions([swapSymbol]);
-                    await closePosition(swapSymbol);
-                    positionState[symbol] = 0;
-                    const { closingPrices: newClosingPrices, highs: newHighs, lows: newLows, currentClose: newCurrentClose } = await fetchKlines(swapSymbol);
-                    for (const p of prePositions) {
-                        if (p.pos !== '0') {
-                            logCloseSummary({
-                                symbol: p.instId.replace('-USDT-SWAP', ''),
-                                side: '空',
-                                entryPrice: Number(p.avgPx),
-                                exitPrice: newCurrentClose,
-                                quantity: String(p.pos).startsWith('-') ? String(p.pos).slice(1) : String(p.pos),
-                                pnl: Number(p.upl),
-                                reason: '命令只做多关闭空仓'
-                            });
-                        }
-                    }
-                    const newHistoricalEMA120 = calculateEMA(newClosingPrices, 120);
-                    const newHistoricalATR60 = calculateATR(newHighs, newLows, newClosingPrices, 60);
-                    const newPriceDistance = (newCurrentClose - newHistoricalEMA120) / newHistoricalATR60;
-                    if (newCurrentClose > newHistoricalEMA120 && newPriceDistance > atrMultiplier) {
-                        await placeOrder(swapSymbol, newCurrentClose, 'long', dynamicPositionUSDT[swapSymbol]);
-                        positionState[symbol] = 1;
-                        longEntryPrice[symbol] = newCurrentClose;
-                        longAddedHalfOnce[symbol] = false;
-                    }
-                    sendToTelegram(`${symbol} 已启用只做多模式并处理持仓`);
+                    // 获取最新价格用于平仓日志
+                    const marketData = await getMarketAnalysis(symbol); 
+                    
+                    // 执行平仓
+                    await executeClosePosition(symbol, marketData.currentClose, '命令只做多关闭空仓'); 
+                    
+                    // 尝试开多
+                    const reAction = await attemptOpenPosition(marketData, 'checkLong', '只做多平空后', true); 
+                    
+                    let msg = `${symbol} 已启用只做多模式并处理持仓`;
+                    if (reAction) msg += `，触发反手: ${reAction}`;
+                    
+                    sendToTelegram(msg);
                 } catch (error) {
                     sendToTelegram(`${symbol} 启用只做多时处理持仓出错: ${error.message}`);
                 }
