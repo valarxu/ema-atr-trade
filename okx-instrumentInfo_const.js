@@ -47,12 +47,12 @@ const SUI_USDT_SWAP = {
 };
 
 const POSITION_USDT = {
-    'BTC-USDT-SWAP': 7500,
-    'ETH-USDT-SWAP': 7500,
-    'SOL-USDT-SWAP': 5000,
-    'ADA-USDT-SWAP': 5000,
-    'HYPE-USDT-SWAP': 5000,
-    'SUI-USDT-SWAP': 5000,
+    'BTC-USDT-SWAP': 1500,
+    'ETH-USDT-SWAP': 2000,
+    'SOL-USDT-SWAP': 2000,
+    'ADA-USDT-SWAP': 1000,
+    'HYPE-USDT-SWAP': 1250,
+    'SUI-USDT-SWAP': 1250,
 };
 
 // 导出所有常量

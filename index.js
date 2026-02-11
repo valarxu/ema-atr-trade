@@ -23,6 +23,9 @@ const dynamicPositionUSDT = {
     'SUI-USDT-SWAP': POSITION_USDT['SUI-USDT-SWAP'],
 };
 
+// 全局开仓金额倍数 (默认为1)
+let globalPositionMultiplier = 1;
+
 // 定义要监控的交易对
 const TRADING_PAIRS = [
     'BTC-USDT',
@@ -188,7 +191,7 @@ async function attemptOpenPosition(marketData, checkType = 'both', logPrefix = '
         priceToCheck > historicalEMA120 && 
         distance > atrMultiplier) {
             
-        await placeOrder(swapSymbol, priceToCheck, 'long', dynamicPositionUSDT[swapSymbol]);
+        await placeOrder(swapSymbol, priceToCheck, 'long', dynamicPositionUSDT[swapSymbol] * globalPositionMultiplier);
         positionState[symbol] = 1;
         longEntryPrice[symbol] = priceToCheck;
         longAddedHalfOnce[symbol] = false;
@@ -204,7 +207,7 @@ async function attemptOpenPosition(marketData, checkType = 'both', logPrefix = '
              !ignoreShortSignals[symbol] && 
              !longOnly[symbol]) {
                  
-        await placeOrder(swapSymbol, priceToCheck, 'short', dynamicPositionUSDT[swapSymbol]);
+        await placeOrder(swapSymbol, priceToCheck, 'short', dynamicPositionUSDT[swapSymbol] * globalPositionMultiplier);
         positionState[symbol] = -1;
         action = logTrade(symbol, '开空🔴', priceToCheck, `${logPrefix}价格在EMA之下，距离${distance.toFixed(2)}个ATR`);
     }
@@ -320,11 +323,11 @@ async function processSymbol(symbol) {
             // 加仓逻辑
             else {
                 if (!longAddedHalfOnce[symbol] && longEntryPrice[symbol] != null && currentClose > (longEntryPrice[symbol] + 5 * historicalATR60)) {
-                    const halfAmount = (dynamicPositionUSDT[swapSymbol] || 0) / 2;
-                    if (halfAmount > 0) {
-                        await placeOrder(swapSymbol, currentClose, 'long', halfAmount);
+                    const addAmount = (dynamicPositionUSDT[swapSymbol] || 0) * globalPositionMultiplier;
+                    if (addAmount > 0) {
+                        await placeOrder(swapSymbol, currentClose, 'long', addAmount);
                         longAddedHalfOnce[symbol] = true;
-                        tradeAction = logTrade(symbol, '加仓🟢', currentClose, `价格较开仓价上升${(5).toFixed(0)}倍ATR60，追加半仓`);
+                        tradeAction = logTrade(symbol, '加仓🟢', currentClose, `价格较开仓价上升${(5).toFixed(0)}倍ATR60，追加同等金额仓位`);
                     }
                 }
             }
@@ -499,8 +502,9 @@ function processTelegramCommand(command) {
 
 <b>开仓金额管理命令:</b>
 /查看金额 - 查看所有交易对的开仓金额
-/设置金额 BTC-USDT 5000 - 设置指定交易对的开仓金额(USDT)
-/重置金额 BTC-USDT - 重置指定交易对的开仓金额为初始值
+/设置金额 BTC-USDT 5000 - 设置指定交易对的基础金额(USDT)
+/重置金额 BTC-USDT - 重置指定交易对的基础金额为初始值
+/设置倍数 1.5 - 设置全局开仓金额倍数
 /帮助 - 显示此帮助信息`;
     } else if (action === '/状态') {
         // 返回所有交易对的状态
@@ -533,13 +537,14 @@ function processTelegramCommand(command) {
         return '已重置所有交易对的忽略做空信号标志';
     } else if (action === '/查看金额') {
         // 查看所有交易对的开仓金额
-        let amountMessage = '📊 <b>开仓金额配置:</b>\n';
+        let amountMessage = `📊 <b>开仓金额配置 (当前倍数: ${globalPositionMultiplier}x):</b>\n`;
         for (const pair of TRADING_PAIRS) {
             const swapPair = `${pair}-SWAP`;
             const currentAmount = dynamicPositionUSDT[swapPair];
             const initialAmount = POSITION_USDT[swapPair];
             const isModified = currentAmount !== initialAmount;
-            amountMessage += `${pair}: ${currentAmount} USDT${isModified ? ' (已修改✏️)' : ' (初始值)'}\n`;
+            const finalAmount = currentAmount * globalPositionMultiplier;
+            amountMessage += `${pair}: 基础 ${currentAmount}${isModified ? '(已改)' : ''} * ${globalPositionMultiplier} = 实际 ${finalAmount} USDT\n`;
         }
         return amountMessage;
     }
@@ -641,6 +646,16 @@ function processTelegramCommand(command) {
         const initialAmount = POSITION_USDT[swapSymbol];
         dynamicPositionUSDT[swapSymbol] = initialAmount;
         return `已重置 ${symbol} 的开仓金额从 ${oldAmount} USDT 恢复为初始值 ${initialAmount} USDT`;
+    } else if (action === '/设置倍数') {
+        if (parts.length < 2) {
+            return '命令格式错误。正确格式: /设置倍数 1.5';
+        }
+        const multiplier = parseFloat(parts[1]);
+        if (isNaN(multiplier) || multiplier <= 0) {
+            return '倍数必须是大于0的数字';
+        }
+        globalPositionMultiplier = multiplier;
+        return `已将全局开仓金额倍数设置为 ${globalPositionMultiplier}x`;
     } else {
         return '未知命令。发送 /帮助 查看所有可用命令';
     }
