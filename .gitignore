@@ -5,6 +5,7 @@ node_modules/
 .env
 .env.local
 .env.*.local
+config/users.json
 
 # 日志文件
 logs

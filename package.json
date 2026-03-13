@@ -20,6 +20,8 @@
     "axios": "^1.7.9",
     "crypto-js": "^4.2.0",
     "dotenv": "^16.4.7",
+    "express": "^5.2.1",
+    "express-basic-auth": "^1.2.1",
     "node-cron": "^3.0.3",
     "node-telegram-bot-api": "^0.66.0"
   },

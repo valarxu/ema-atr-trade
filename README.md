@@ -1,147 +1,149 @@
-# EMA-ATR 加密货币自动化交易系统
+# EMA-ATR 加密货币自动化交易系统 (多用户版)
 
-这是一个基于EMA（指数移动平均线）和ATR（平均真实波幅）指标的加密货币自动化交易系统。该系统通过OKX交易所的API接口，实现了以下功能：
+这是一个基于EMA（指数移动平均线）和ATR（平均真实波幅）指标的加密货币自动化交易系统。该系统经过重构，支持**单进程多用户**模式，并提供了**可视化网页控制台**。
 
-- 自动监控多个交易对（BTC-USDT、ETH-USDT、SOL-USDT、ADA-USDT）
-- 基于EMA和ATR指标自动开平仓
-- 实时计算技术指标
-- Telegram消息通知
-- 交易日志记录
+## 🌟 主要特性
 
-## 交易策略
+*   **多用户支持**：单个程序实例可同时管理多个OKX账号，策略独立运行。
+*   **资源优化**：共享行情数据获取，大幅降低交易所API请求频率。
+*   **可视化控制台**：
+    *   网页端实时查看各币种持仓、盈亏及信号状态。
+    *   支持一键开关交易、切换"只做多"模式、重置信号等。
+    *   支持独立设置每个用户的全局杠杆倍数和单币种开仓金额。
+*   **自动化策略**：
+    *   基于EMA120判断趋势，ATR14判断波动。
+    *   自动开平仓、自动止盈、趋势反转自动反手。
+    *   支持顺势加仓逻辑。
+*   **消息通知**：通过Telegram Bot向对应用户发送实时交易信号和日报。
 
-系统使用以下技术指标和规则进行交易：
+## 🚀 交易策略逻辑
 
-- EMA120（120周期指数移动平均线）：用于判断趋势方向
-- ATR14（14周期平均真实波幅）：用于判断价格波动幅度
-- 开仓条件：
-  - 多仓：价格在EMA之上且距离超过1.5倍ATR
-  - 空仓：价格在EMA之下且距离超过1.5倍ATR
-- 平仓条件：
-  - 多仓：价格跌破EMA
-  - 空仓：价格突破EMA
+系统对每个监控的交易对（如 BTC-USDT, ETH-USDT 等）执行以下逻辑：
 
-## 功能特点
+1.  **数据获取**：每4小时获取一次K线数据，计算 EMA120 和 ATR14。
+2.  **开仓条件**：
+    *   **做多**：收盘价 > EMA120 且 (收盘价 - EMA120) > 1.5 * ATR14。
+    *   **做空**：收盘价 < EMA120 且 (EMA120 - 收盘价) > 1.5 * ATR14 (且未开启"只做多"或"忽略做空")。
+3.  **平仓条件**：
+    *   **平多**：收盘价跌破 EMA120。
+    *   **平空**：收盘价突破 EMA120 或 价格向下偏离超过 5 * ATR14 (止盈)。
+4.  **加仓逻辑**：
+    *   仅针对多单，当价格较开仓价上涨超过 5 * ATR14 时，追加一次同等金额仓位。
+5.  **反手逻辑**：
+    *   平仓后会立即使用当前最新价格重新评估是否满足反向开仓条件。
 
-- 实时获取OKX交易所的K线数据（4小时周期）
-- 自动计算技术指标（EMA120、ATR14）
-- 自动执行开平仓操作
-- 支持多交易对同时监控（BTC、ETH、SOL、ADA）
-- 支持逐仓/全仓模式
-- 支持设置杠杆倍数
-- 自动记录交易日志
-- Telegram实时通知交易信号和持仓状态
+## 📂 项目结构
 
-## 安装要求
+```
+.
+├── config/
+│   ├── users.json          # 用户配置文件 (账号、API Key、策略开关)
+│   └── users.example.json  # 配置示例
+├── public/                 # 网页端前端资源
+├── scripts/                # 独立的OKX工具脚本 (设置杠杆、查询等)
+├── services/
+│   ├── MarketService.js    # 共享行情服务 (单例)
+│   ├── OkxClient.js        # OKX API 封装
+│   ├── StrategyBot.js      # 策略核心逻辑 (每个用户一个实例)
+│   ├── web-server.js       # 网页控制台后端
+│   └── telegram.js         # TG消息推送
+├── utils/
+│   ├── constants.js        # 交易对及常量定义
+│   └── technical-indicators.js # 指标计算
+├── index.js                # 程序入口
+└── .env                    # 全局环境变量
+```
 
-- Node.js >= 14.0.0
-- npm 或 yarn
-- OKX API密钥（包含API Key、Secret Key和Passphrase）
-- Telegram Bot Token（用于接收通知）
+## 🛠️ 安装与配置
 
-## 安装步骤
+### 1. 环境准备
+*   Node.js >= 14.0.0
+*   OKX API Key (V5)
+*   Telegram Bot Token (用于通知)
 
-1. 克隆仓库：
+### 2. 安装依赖
 ```bash
-git clone https://github.com/[your-username]/ema-atr-trade.git
+git clone <repository-url>
 cd ema-atr-trade
-```
-
-2. 安装依赖：
-```bash
 npm install
-# 或
-yarn install
 ```
 
-3. 配置环境变量：
-创建 `.env` 文件并填入以下信息：
-```
-OKX_API_KEY=你的OKX_API_KEY
-OKX_SECRET_KEY=你的OKX_SECRET_KEY
-OKX_PASSPHRASE=你的OKX_PASSPHRASE
-TELEGRAM_BOT_TOKEN=你的TELEGRAM_BOT_TOKEN
-TELEGRAM_CHAT_ID=你的TELEGRAM_CHAT_ID
-```
+### 3. 全局配置 (.env)
+复制 `.env` 文件并填写基础信息：
+```env
+# Telegram 机器人配置 (所有用户共享同一个Bot发送消息)
+TELEGRAM_BOT_TOKEN=你的BotToken
+TELEGRAM_CHAT_ID=默认管理员ID
 
-> **安全提示**：请确保 `.env` 文件已添加到 `.gitignore` 中，避免敏感信息泄露。
-
-## 使用方法
-
-1. 运行初始化设置（首次使用）：
-```bash
-# 设置持仓模式为双向持仓
-node okx-set-position-mode.js
-# 设置逐仓模式
-node okx-set-isolated-mode.js
-# 设置杠杆倍数
-node okx-set-leverage.js
+# Web控制台全局管理员 (可选)
+WEB_USER=admin
+WEB_PASS=admin123
 ```
 
-2. 启动交易系统：
+### 4. 用户配置 (config/users.json)
+这是核心配置文件。复制 `config/users.example.json` 为 `config/users.json` 并编辑：
+
+```json
+[
+  {
+    "id": "user1",
+    "name": "主账号",
+    "username": "admin",      // Web登录用户名
+    "password": "password123", // Web登录密码
+    "enabled": true,
+    "telegram": {
+      "chatId": "用户1的TG_Chat_ID"
+    },
+    "okx": {
+      "apiKey": "...",
+      "secretKey": "...",
+      "passphrase": "..."
+    },
+    "settings": {
+      "multiplier": 1.0,      // 全局金额倍数
+      "tradingEnabled": {     // 初始交易开关
+        "BTC-USDT": false,
+        "ETH-USDT": false
+        // ...
+      },
+      "longOnly": {},         // 只做多模式
+      "ignoreShortSignals": {} // 忽略做空信号
+    }
+  },
+  {
+    "id": "user2",
+    "name": "第二个账号",
+    ...
+  }
+]
+```
+> ⚠️ **注意**：`config/users.json` 包含敏感信息，请勿提交到 Git 仓库 (已加入 .gitignore)。
+
+## ▶️ 启动与使用
+
+### 启动程序
 ```bash
 node index.js
-# 或使用PM2等工具保持后台运行
-pm2 start index.js --name ema-atr-trade
+# 或使用 PM2
+pm2 start index.js --name trade-bot
 ```
 
-系统启动后将：
-- 每4小时自动获取K线数据并计算指标
-- 根据策略自动执行开平仓操作
-- 通过Telegram发送交易信号和持仓状态通知
-- 在 `logs` 目录下记录详细的交易日志
+### 访问控制台
+启动成功后，浏览器访问：`http://服务器IP:3020`
 
-## 配置说明
+*   输入 `config/users.json` 中配置的 `username` 和 `password` 登录。
+*   系统会自动识别用户，只显示该用户的策略状态。
+*   **功能**：
+    *   **启用/禁用**：控制特定币种是否参与交易。
+    *   **只做多**：开启后，该币种只会开多单，现有空单会被平仓。
+    *   **忽略做空**：开启后，不执行新的做空信号（通常用于手动止盈后防止立即反手）。
+    *   **修改金额**：调整基础开仓金额或全局倍数，实时生效。
 
-在 `okx-instrumentInfo_const.js` 中，你可以修改以下参数：
-- 交易对配置（BTC/ETH/SOL/ADA-USDT）
-- 合约面值
-- 最小交易单位
-- 单次开仓金额（POSITION_USDT）
+## 🔧 辅助脚本
+在 `scripts/` 目录下提供了一些独立的工具脚本，可单独运行：
+*   `okx-set-position-mode.js`: 设置持仓模式
+*   `okx-set-leverage.js`: 批量设置杠杆
+*   `okx-get-positions.js`: 查看当前持仓
 
-在 `index.js` 中，你可以修改：
-- 监控的交易对列表
-- 定时任务执行时间
-- 技术指标参数
-
-## 安全注意事项
-
-1. **API密钥安全**：
-   - 仅授予API密钥必要的权限（交易、查询）
-   - 定期更换API密钥
-   - 使用IP白名单限制API访问
-
-2. **环境变量保护**：
-   - 确保 `.env` 文件不被提交到版本控制系统
-   - 在生产环境使用环境变量管理工具
-
-3. **错误处理**：
-   - 系统已实现基本的错误处理机制
-   - 建议添加更多的异常处理和重试机制
-
-4. **资金安全**：
-   - 建议在小资金测试后再使用大资金
-   - 设置合理的仓位大小和风险控制参数
-
-## 风险提示
-
-本项目仅供学习和研究使用。加密货币交易具有高风险，请在使用本系统时：
-- 仔细阅读并理解交易策略
-- 使用适量资金进行测试
-- 密切关注系统运行状态
-- 及时处理异常情况
-
-## 更新日志
-
-### 2024-02-21
-- 添加ADA-USDT交易对支持
-- 优化持仓状态管理
-- 改进错误处理机制
-
-### 2024-01-30
-- 初始版本发布
-- 支持BTC、ETH、SOL交易对
-
-## 许可证
-
-MIT 
+## ⚠️ 风险提示
+本项目仅供学习研究，实盘交易请自行承担风险。建议先使用小资金或模拟盘测试。

@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>量化交易控制台</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📊 交易策略控制台</h1>
+            <div id="user-info" style="font-size: 0.9em; color: #aaa;"></div>
+        </header>
+
+        <section class="global-controls">
+            <div class="control-group">
+                <label>全局开仓倍数:</label>
+                <input type="number" id="global-multiplier" step="0.1" min="0.1">
+                <button class="primary" id="save-multiplier">保存</button>
+            </div>
+            
+            <div class="control-group" style="margin-left: auto;">
+                <button id="enable-all">全部启用</button>
+                <button id="disable-all">全部禁用</button>
+                <button id="reset-all-shorts">重置所有空信号</button>
+            </div>
+        </section>
+
+        <section class="grid" id="cards-container">
+            <!-- Cards will be injected here -->
+            <div style="color: #aaa; grid-column: 1/-1; text-align: center; padding: 50px;">
+                加载中...
+            </div>
+        </section>
+    </div>
+
+    <div class="loading-overlay" id="loading-overlay">
+        <div class="spinner"></div>
+    </div>
+
+    <script src="js/app.js"></script>
+</body>
+</html>

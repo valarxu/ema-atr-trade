@@ -1,0 +1,22 @@
+[
+  {
+    "id": "example_user",
+    "name": "示例账号",
+    "enabled": false,
+    "telegram": {
+      "chatId": "YOUR_CHAT_ID",
+      "botToken": "YOUR_BOT_TOKEN_OPTIONAL"
+    },
+    "okx": {
+      "apiKey": "YOUR_API_KEY",
+      "secretKey": "YOUR_SECRET_KEY",
+      "passphrase": "YOUR_PASSPHRASE"
+    },
+    "settings": {
+      "multiplier": 1.0,
+      "tradingEnabled": {},
+      "ignoreShortSignals": {},
+      "longOnly": {}
+    }
+  }
+]
