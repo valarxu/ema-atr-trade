@@ -547,6 +547,65 @@ function processTelegramCommand(command) {
             amountMessage += `${pair}: 基础 ${currentAmount}${isModified ? '(已改)' : ''} * ${globalPositionMultiplier} = 实际 ${finalAmount} USDT\n`;
         }
         return amountMessage;
+    } else if (action === '/设置倍数') {
+        if (parts.length < 2) {
+            return '命令格式错误。正确格式: /设置倍数 1.5';
+        }
+        const multiplier = parseFloat(parts[1]);
+        if (isNaN(multiplier) || multiplier <= 0) {
+            return '倍数必须是大于0的数字';
+        }
+        globalPositionMultiplier = multiplier;
+        return `已将全局开仓金额倍数设置为 ${globalPositionMultiplier}x`;
+    } else if (action === '/设置金额') {
+        // 支持批量设置: /设置金额 BTC 5000 ETH 4000
+        if (parts.length < 3 || parts.length % 2 === 0) {
+            return '命令格式错误。正确格式: /设置金额 BTC 5000 或 /设置金额 BTC 5000 ETH 4000';
+        }
+
+        let resultMessage = '⚙️ <b>金额设置结果:</b>\n';
+        
+        // 从索引1开始遍历，每次跳过2个（币种+金额）
+        for (let i = 1; i < parts.length; i += 2) {
+            let symbolInput = parts[i].toUpperCase();
+            const amountStr = parts[i + 1];
+            
+            // 自动补全后缀
+            let symbol = symbolInput;
+            if (!symbol.includes('-USDT')) {
+                // 尝试查找匹配的交易对
+                const match = TRADING_PAIRS.find(p => p.startsWith(`${symbol}-USDT`) || p === `${symbol}-USDT`);
+                if (match) {
+                    symbol = match;
+                } else if (TRADING_PAIRS.includes(`${symbol}-USDT`)) {
+                     symbol = `${symbol}-USDT`;
+                }
+            }
+
+            // 检查交易对是否存在
+            if (!TRADING_PAIRS.includes(symbol)) {
+                resultMessage += `❌ ${symbolInput}: 未知交易对\n`;
+                continue;
+            }
+
+            const amount = parseFloat(amountStr);
+            if (isNaN(amount) || amount <= 0) {
+                resultMessage += `❌ ${symbol}: 金额 "${amountStr}" 无效\n`;
+                continue;
+            }
+            
+            if (amount > 50000) {
+                resultMessage += `⚠️ ${symbol}: 金额 ${amount} 超过上限50000，已跳过\n`;
+                continue;
+            }
+
+            const swapSymbol = `${symbol}-SWAP`;
+            const oldAmount = dynamicPositionUSDT[swapSymbol];
+            dynamicPositionUSDT[swapSymbol] = amount;
+            resultMessage += `✅ ${symbol}: ${oldAmount} ➔ ${amount} USDT\n`;
+        }
+        
+        return resultMessage;
     }
     
     // 处理需要参数的命令
@@ -623,55 +682,6 @@ function processTelegramCommand(command) {
     } else if (action === '/取消只做多') {
         longOnly[symbol] = false;
         return `已取消 ${symbol} 的只做多模式`;
-    } else if (action === '/设置金额') {
-        // 支持批量设置: /设置金额 BTC 5000 ETH 4000
-        if (parts.length < 3 || parts.length % 2 === 0) {
-            return '命令格式错误。正确格式: /设置金额 BTC 5000 或 /设置金额 BTC 5000 ETH 4000';
-        }
-
-        let resultMessage = '⚙️ <b>金额设置结果:</b>\n';
-        
-        // 从索引1开始遍历，每次跳过2个（币种+金额）
-        for (let i = 1; i < parts.length; i += 2) {
-            let symbolInput = parts[i].toUpperCase();
-            const amountStr = parts[i + 1];
-            
-            // 自动补全后缀
-            let symbol = symbolInput;
-            if (!symbol.includes('-USDT')) {
-                // 尝试查找匹配的交易对
-                const match = TRADING_PAIRS.find(p => p.startsWith(`${symbol}-USDT`) || p === `${symbol}-USDT`);
-                if (match) {
-                    symbol = match;
-                } else if (TRADING_PAIRS.includes(`${symbol}-USDT`)) {
-                     symbol = `${symbol}-USDT`;
-                }
-            }
-
-            // 检查交易对是否存在
-            if (!TRADING_PAIRS.includes(symbol)) {
-                resultMessage += `❌ ${symbolInput}: 未知交易对\n`;
-                continue;
-            }
-
-            const amount = parseFloat(amountStr);
-            if (isNaN(amount) || amount <= 0) {
-                resultMessage += `❌ ${symbol}: 金额 "${amountStr}" 无效\n`;
-                continue;
-            }
-            
-            if (amount > 50000) {
-                resultMessage += `⚠️ ${symbol}: 金额 ${amount} 超过上限50000，已跳过\n`;
-                continue;
-            }
-
-            const swapSymbol = `${symbol}-SWAP`;
-            const oldAmount = dynamicPositionUSDT[swapSymbol];
-            dynamicPositionUSDT[swapSymbol] = amount;
-            resultMessage += `✅ ${symbol}: ${oldAmount} ➔ ${amount} USDT\n`;
-        }
-        
-        return resultMessage;
     } else if (action === '/重置金额') {
         // 重置指定交易对的开仓金额为初始值
         const swapSymbol = `${symbol}-SWAP`;
@@ -679,16 +689,6 @@ function processTelegramCommand(command) {
         const initialAmount = POSITION_USDT[swapSymbol];
         dynamicPositionUSDT[swapSymbol] = initialAmount;
         return `已重置 ${symbol} 的开仓金额从 ${oldAmount} USDT 恢复为初始值 ${initialAmount} USDT`;
-    } else if (action === '/设置倍数') {
-        if (parts.length < 2) {
-            return '命令格式错误。正确格式: /设置倍数 1.5';
-        }
-        const multiplier = parseFloat(parts[1]);
-        if (isNaN(multiplier) || multiplier <= 0) {
-            return '倍数必须是大于0的数字';
-        }
-        globalPositionMultiplier = multiplier;
-        return `已将全局开仓金额倍数设置为 ${globalPositionMultiplier}x`;
     } else {
         return '未知命令。发送 /帮助 查看所有可用命令';
     }
