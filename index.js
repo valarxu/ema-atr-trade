@@ -124,17 +124,21 @@ const botManager = {
                 let totalProfit = 0;
                 let hasPosition = false;
 
-                // 由于bot.initialize已经获取了最新持仓并更新了state，这里直接再次获取详情有点冗余
-                // 但为了获取准确的upl(未实现盈亏)，还是调一次API比较稳妥，或者在initialize里存下来
-                // 简单起见，这里直接调API获取
-                const positions = await bot.client.getPositions();
+                // 由于bot.initialize已经获取了最新持仓并更新了state，这里直接读取bot.positionDetails即可
+                // 无需再次调用API，节省请求
+                // bot.positionDetails 格式: { 'BTC-USDT': { upl: 0, avgPx: 0, pos: 0 } }
                 
-                for (const p of positions) {
-                    if (p.pos !== '0') {
+                const details = bot.positionDetails || {};
+                
+                for (const symbol of Object.keys(details)) {
+                    const detail = details[symbol];
+                    if (detail && detail.pos !== '0' && detail.pos !== 0) {
                         hasPosition = true;
-                        const profit = parseFloat(p.upl);
+                        const profit = parseFloat(detail.upl);
+                        const side = bot.positionState[symbol] === 1 ? '多🟢' : '空🔴';
+                        
                         totalProfit += profit;
-                        msg += `<b>🔹 ${p.instId.replace('-USDT-SWAP', '')}</b> | ${p.posSide==='long'?'多🟢':'空🔴'} | 盈亏: ${profit.toFixed(2)}\n`;
+                        msg += `<b>🔹 ${symbol}</b> | ${side} | 盈亏: ${profit > 0 ? '+' : ''}${profit.toFixed(2)}\n`;
                     }
                 }
 
