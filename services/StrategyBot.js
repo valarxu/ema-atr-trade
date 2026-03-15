@@ -11,6 +11,8 @@ class StrategyBot {
     constructor(userConfig) {
         this.id = userConfig.id;
         this.name = userConfig.name;
+        this.username = userConfig.username; // 新增：保存用户名
+        this.password = userConfig.password; // 新增：保存密码
         this.client = new OkxClient(userConfig.okx);
         
         // Telegram配置

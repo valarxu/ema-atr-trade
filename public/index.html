@@ -23,6 +23,12 @@
         <header>
             <h1>📊 交易策略控制台</h1>
             <div style="display: flex; align-items: center; gap: 15px;">
+                <div id="admin-controls" style="display: none; align-items: center; gap: 10px;">
+                    <span style="color: #4caf50; font-size: 0.9em; font-weight: bold;">[管理员]</span>
+                    <select id="user-select" style="padding: 4px; border-radius: 4px; background: #333; color: white; border: 1px solid #555;">
+                        <option value="">加载中...</option>
+                    </select>
+                </div>
                 <div id="user-info" style="font-size: 0.9em; color: #aaa;"></div>
                 <button id="logout-btn" class="small danger" style="padding: 4px 8px;">登出</button>
             </div>

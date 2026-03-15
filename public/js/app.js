@@ -1,11 +1,17 @@
 // State
 let appState = null;
+let currentTargetUserId = null; // 用于管理员切换用户
+let isAdminMode = false;
 
 // DOM Elements
 const container = document.getElementById('cards-container');
 const globalMultiplierInput = document.getElementById('global-multiplier');
 const loadingOverlay = document.getElementById('loading-overlay');
 const userInfoDisplay = document.getElementById('user-info');
+
+// Admin Elements
+const adminControls = document.getElementById('admin-controls');
+const userSelect = document.getElementById('user-select');
 
 // Login Elements
 const loginContainer = document.getElementById('login-container');
@@ -51,6 +57,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if(confirm('确定要登出吗？')) {
             logout();
         }
+    });
+
+    // Admin User Switch
+    userSelect.addEventListener('change', (e) => {
+        currentTargetUserId = e.target.value;
+        fetchState();
     });
 });
 
@@ -129,10 +141,38 @@ function showMain() {
 }
 
 // --- Data Functions ---
+async function fetchAdminUsers() {
+    try {
+        const res = await fetch('/api/users', { headers: getAuthHeaders() });
+        if (!res.ok) return;
+        const users = await res.json();
+        
+        userSelect.innerHTML = '';
+        users.forEach(u => {
+            const opt = document.createElement('option');
+            opt.value = u.id;
+            opt.textContent = `${u.name} (${u.username})`;
+            if (currentTargetUserId === u.id) opt.selected = true;
+            userSelect.appendChild(opt);
+        });
+        
+        if (!currentTargetUserId && users.length > 0) {
+            currentTargetUserId = users[0].id;
+        }
+    } catch (e) {
+        console.error('Failed to fetch users list');
+    }
+}
+
 async function fetchState() {
     showLoading(true);
     try {
-        const res = await fetch('/api/status', {
+        let url = '/api/status';
+        if (isAdminMode && currentTargetUserId) {
+            url += `?userId=${currentTargetUserId}`;
+        }
+
+        const res = await fetch(url, {
             headers: getAuthHeaders()
         });
         
@@ -143,6 +183,18 @@ async function fetchState() {
         
         if (!res.ok) throw new Error('Failed to fetch state');
         appState = await res.json();
+        
+        // Admin Mode Setup
+        if (appState.isGlobalAdmin && !isAdminMode) {
+            isAdminMode = true;
+            adminControls.style.display = 'flex';
+            if (!currentTargetUserId) currentTargetUserId = appState.id;
+            await fetchAdminUsers();
+        } else if (!appState.isGlobalAdmin) {
+            isAdminMode = false;
+            adminControls.style.display = 'none';
+        }
+
         render();
     } catch (err) {
         showToast('加载状态失败: ' + err.message, 'error');
@@ -159,13 +211,15 @@ async function updateSetting(action, payload) {
             ...getAuthHeaders()
         };
 
+        const bodyData = { action, ...payload };
+        if (isAdminMode && currentTargetUserId) {
+            bodyData.userId = currentTargetUserId;
+        }
+
         const res = await fetch('/api/update', {
             method: 'POST',
             headers: headers,
-            body: JSON.stringify({ 
-                action, 
-                ...payload 
-            })
+            body: JSON.stringify(bodyData)
         });
         
         if (res.status === 401) {

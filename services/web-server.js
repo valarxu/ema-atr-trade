@@ -68,8 +68,15 @@ function startWebServer(port, botManager) {
 
         const bots = botManager.getAllBots();
         if (session.isAdmin) {
-            req.currentUser = bots[0]; 
             req.isGlobalAdmin = true;
+            // 如果请求中指定了 userId，且存在该用户，则以该用户视角操作
+            const targetUserId = req.query.userId || (req.body && req.body.userId);
+            if (targetUserId) {
+                const targetBot = bots.find(b => b.id === targetUserId);
+                req.currentUser = targetBot || bots[0];
+            } else {
+                req.currentUser = bots[0]; 
+            }
         } else {
             const userBot = bots.find(b => b.username === session.username);
             if (userBot) {
@@ -80,6 +87,20 @@ function startWebServer(port, botManager) {
         }
         next();
     };
+
+    // API: 获取所有用户列表 (仅限管理员)
+    app.get('/api/users', authMiddleware, (req, res) => {
+        if (!req.isGlobalAdmin) {
+            return res.status(403).json({ error: '权限不足' });
+        }
+        const bots = botManager.getAllBots();
+        const list = bots.map(b => ({
+            id: b.id,
+            name: b.name,
+            username: b.username
+        }));
+        res.json(list);
+    });
 
     // API: 获取当前登录用户的状态
     app.get('/api/status', authMiddleware, async (req, res) => {
