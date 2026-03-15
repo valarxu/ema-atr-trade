@@ -31,6 +31,24 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('reset-all-shorts').addEventListener('click', () => {
         if(confirm('确定重置所有忽略做空信号标志吗？')) updateSetting('resetAllShortSignals', {});
     });
+
+    // Logout Button
+    document.getElementById('logout-btn').addEventListener('click', () => {
+        if(confirm('确定要登出吗？')) {
+            // 利用浏览器机制清除 Basic Auth 缓存：
+            // 访问一个包含错误凭证的同源URL，强制浏览器丢弃之前的凭证并弹出登录框或返回401
+            const url = new URL(window.location.href);
+            url.username = 'logout';
+            url.password = 'logout';
+            
+            fetch(url.href, { mode: 'no-cors' }).then(() => {
+                // 跳转回首页，此时由于没有凭证或凭证错误，会重新弹出登录框
+                window.location.href = '/';
+            }).catch(() => {
+                window.location.href = '/';
+            });
+        }
+    });
 });
 
 async function fetchState() {
@@ -81,7 +99,7 @@ function render() {
 
     // Render User Info
     if (userInfoDisplay) {
-        userInfoDisplay.textContent = `当前用户: ${appState.name} (${appState.username})`;
+        userInfoDisplay.textContent = `当前用户: ${appState.name}`;
     }
 
     // Render Global Settings
