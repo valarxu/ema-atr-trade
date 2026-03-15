@@ -33,11 +33,15 @@ const botManager = {
                     const bot = new StrategyBot(userConfig);
                     const initSuccess = await bot.initialize();
                     
+                    // 无论初始化是否成功（API可能暂时错误/密钥错误），我们都将机器人加入管理器
+                    // 这样Web端依然可以登录并修改配置
+                    this.bots.set(bot.id, bot);
+                    
                     if (initSuccess) {
-                        this.bots.set(bot.id, bot);
                         console.log(`✅ 机器人 ${bot.name} 初始化成功`);
                     } else {
-                        console.error(`❌ 机器人 ${bot.name} 初始化失败`);
+                        console.error(`⚠️ 机器人 ${bot.name} 初始化失败 (API验证失败或网络错误)`);
+                        console.log(`⚠️ ${bot.name} 将处于离线状态，但您仍可通过Web控制台修改其配置。`);
                     }
                 } catch (e) {
                     console.error(`❌ 创建机器人 ${userConfig.name} 失败: ${e.message}`);
@@ -144,8 +148,8 @@ async function startup() {
     await botManager.initialize();
 
     if (botManager.getAllBots().length === 0) {
-        console.error('没有有效的机器人实例，程序退出');
-        process.exit(1);
+        console.error('⚠️ 没有加载到任何用户配置。请检查 config/users.json。');
+        // 不再直接退出，允许启动Web服务以便用户排查
     }
 
     // 2. 启动Web服务器
