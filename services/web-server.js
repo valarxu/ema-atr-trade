@@ -102,6 +102,31 @@ function startWebServer(port, botManager) {
         res.json(list);
     });
 
+    // API: 获取交易历史
+    app.get('/api/history', authMiddleware, (req, res) => {
+        const { getTradeHistory } = require('../utils/logger');
+        const history = getTradeHistory();
+        
+        // 过滤当前用户的历史
+        // 如果是管理员且指定了userId，则过滤该用户的
+        // 如果是管理员且没指定，显示所有？或者显示当前选中的？
+        // 这里的逻辑跟 status 保持一致，req.currentUser 已经是目标用户了
+        
+        // 但是 req.currentUser 在管理员模式下，如果没有指定 userId，默认是第一个用户。
+        // 这可能导致管理员看不到所有人的历史。
+        // 让我们稍微调整一下：
+        // 如果是管理员，且 query 中没有 userId，则返回所有历史？或者前端传 userId。
+        // 前端 app.js 在 fetchState 时会传 userId。
+        // 让我们约定：前端也会传 userId 给 history 接口。
+        
+        let targetUser = req.currentUser;
+        
+        // 过滤
+        const userHistory = history.filter(h => h.user === targetUser.name).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        
+        res.json(userHistory);
+    });
+
     // API: 获取当前登录用户的状态
     app.get('/api/status', authMiddleware, async (req, res) => {
         try {

@@ -2,12 +2,18 @@
 let appState = null;
 let currentTargetUserId = null; // 用于管理员切换用户
 let isAdminMode = false;
+let pnlChart = null; // Chart实例
 
 // DOM Elements
 const container = document.getElementById('cards-container');
 const globalMultiplierInput = document.getElementById('global-multiplier');
 const loadingOverlay = document.getElementById('loading-overlay');
 const userInfoDisplay = document.getElementById('user-info');
+
+// Views
+const viewDashboard = document.getElementById('view-dashboard');
+const viewHistory = document.getElementById('view-history');
+const historyTableBody = document.querySelector('#history-table tbody');
 
 // Admin Elements
 const adminControls = document.getElementById('admin-controls');
@@ -29,6 +35,26 @@ document.addEventListener('DOMContentLoaded', () => {
     loginSubmit.addEventListener('click', handleLogin);
     loginPass.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') handleLogin();
+    });
+
+    // Tab Handling
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            // UI Switch
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            
+            const target = btn.dataset.target;
+            if (target === 'dashboard') {
+                viewDashboard.style.display = 'block';
+                viewHistory.style.display = 'none';
+                fetchState(); // Refresh dashboard
+            } else {
+                viewDashboard.style.display = 'none';
+                viewHistory.style.display = 'block';
+                fetchHistory(); // Load history
+            }
+        });
     });
 
     // Global Multiplier Save Button
@@ -62,7 +88,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // Admin User Switch
     userSelect.addEventListener('change', (e) => {
         currentTargetUserId = e.target.value;
-        fetchState();
+        // Refresh current view
+        if (viewDashboard.style.display !== 'none') {
+            fetchState();
+        } else {
+            fetchHistory();
+        }
     });
 });
 
@@ -230,6 +261,7 @@ async function updateSetting(action, payload) {
         const data = await res.json();
         if (data.success) {
             showToast('设置已保存', 'success');
+            // Refresh dashboard
             fetchState(); 
         } else {
             throw new Error(data.error || 'Unknown error');
@@ -238,6 +270,113 @@ async function updateSetting(action, payload) {
         showToast('保存失败: ' + err.message, 'error');
         showLoading(false);
     }
+}
+
+// --- History Functions ---
+async function fetchHistory() {
+    showLoading(true);
+    try {
+        let url = '/api/history';
+        if (isAdminMode && currentTargetUserId) {
+            url += `?userId=${currentTargetUserId}`;
+        }
+        
+        const res = await fetch(url, { headers: getAuthHeaders() });
+        if (res.status === 401) return logout();
+        
+        const history = await res.json();
+        renderHistoryTable(history);
+        renderHistoryChart(history);
+    } catch (e) {
+        console.error('Fetch history failed', e);
+        showToast('加载历史失败', 'error');
+    } finally {
+        showLoading(false);
+    }
+}
+
+function renderHistoryTable(history) {
+    historyTableBody.innerHTML = '';
+    
+    if (history.length === 0) {
+        historyTableBody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:#666;">暂无记录</td></tr>';
+        return;
+    }
+    
+    history.forEach(item => {
+        const row = document.createElement('tr');
+        const time = new Date(item.timestamp).toLocaleString();
+        const pnl = parseFloat(item.pnl);
+        const pnlClass = pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
+        
+        row.innerHTML = `
+            <td>${time}</td>
+            <td>${item.symbol}</td>
+            <td><span class="${item.side === '多' ? 'pnl-positive' : 'pnl-negative'}">${item.side}</span></td>
+            <td>${item.entryPrice.toFixed(4)}</td>
+            <td>${item.exitPrice.toFixed(4)}</td>
+            <td>${item.quantity}</td>
+            <td class="${pnlClass}">${pnl > 0 ? '+' : ''}${pnl.toFixed(2)}</td>
+            <td>${item.reason}</td>
+        `;
+        historyTableBody.appendChild(row);
+    });
+}
+
+function renderHistoryChart(history) {
+    const ctx = document.getElementById('pnlChart').getContext('2d');
+    
+    // Process data for chart
+    // Sort by time ascending
+    const sorted = [...history].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    
+    let cumulativePnl = 0;
+    const labels = [];
+    const dataPoints = [];
+    
+    sorted.forEach(item => {
+        cumulativePnl += parseFloat(item.pnl);
+        labels.push(new Date(item.timestamp).toLocaleDateString());
+        dataPoints.push(cumulativePnl);
+    });
+    
+    if (pnlChart) {
+        pnlChart.destroy();
+    }
+    
+    pnlChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: '累计盈亏 (USDT)',
+                data: dataPoints,
+                borderColor: '#4caf50',
+                backgroundColor: 'rgba(76, 175, 80, 0.1)',
+                tension: 0.1,
+                fill: true
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    labels: { color: '#ccc' }
+                }
+            },
+            scales: {
+                y: {
+                    grid: { color: '#333' },
+                    ticks: { color: '#aaa' }
+                },
+                x: {
+                    grid: { color: '#333' },
+                    ticks: { color: '#aaa' }
+                }
+            }
+        }
+    });
 }
 
 function render() {

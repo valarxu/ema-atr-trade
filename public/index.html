@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>量化交易控制台</title>
     <link rel="stylesheet" href="css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
     <!-- 登录界面 -->
@@ -34,26 +35,63 @@
             </div>
         </header>
 
-        <section class="global-controls">
-            <div class="control-group">
-                <label>全局开仓倍数:</label>
-                <input type="number" id="global-multiplier" step="0.1" min="0.1">
-                <button class="primary" id="save-multiplier">保存</button>
-            </div>
-            
-            <div class="control-group" style="margin-left: auto;">
-                <button id="enable-all">全部启用</button>
-                <button id="disable-all">全部禁用</button>
-                <button id="reset-all-shorts">重置所有空信号</button>
-            </div>
-        </section>
+        <nav class="tabs">
+            <button class="tab-btn active" data-target="dashboard">控制面板</button>
+            <button class="tab-btn" data-target="history">历史记录</button>
+        </nav>
 
-        <section class="grid" id="cards-container">
-            <!-- Cards will be injected here -->
-            <div style="color: #aaa; grid-column: 1/-1; text-align: center; padding: 50px;">
-                加载中...
+        <div id="view-dashboard">
+            <section class="global-controls">
+                <div class="control-group">
+                    <label>全局开仓倍数:</label>
+                    <input type="number" id="global-multiplier" step="0.1" min="0.1">
+                    <button class="primary" id="save-multiplier">保存</button>
+                </div>
+                
+                <div class="control-group" style="margin-left: auto;">
+                    <button id="enable-all">全部启用</button>
+                    <button id="disable-all">全部禁用</button>
+                    <button id="reset-all-shorts">重置所有空信号</button>
+                </div>
+            </section>
+
+            <section class="grid" id="cards-container">
+                <!-- Cards will be injected here -->
+                <div style="color: #aaa; grid-column: 1/-1; text-align: center; padding: 50px;">
+                    加载中...
+                </div>
+            </section>
+        </div>
+
+        <div id="view-history" style="display: none; padding: 20px;">
+            <div style="max-width: 1000px; margin: 0 auto;">
+                <h2 style="margin-bottom: 20px;">盈亏曲线</h2>
+                <div class="chart-container" style="position: relative; height: 300px; margin-bottom: 30px; background: #252525; padding: 15px; border-radius: 8px;">
+                    <canvas id="pnlChart"></canvas>
+                </div>
+                
+                <h2 style="margin-bottom: 20px;">交易记录</h2>
+                <div class="table-container">
+                    <table id="history-table">
+                        <thead>
+                            <tr>
+                                <th>时间</th>
+                                <th>交易对</th>
+                                <th>方向</th>
+                                <th>开仓价</th>
+                                <th>平仓价</th>
+                                <th>数量</th>
+                                <th>盈亏 (USDT)</th>
+                                <th>原因</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Rows -->
+                        </tbody>
+                    </table>
+                </div>
             </div>
-        </section>
+        </div>
     </div>
 
     <div class="loading-overlay" id="loading-overlay">

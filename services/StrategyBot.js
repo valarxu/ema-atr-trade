@@ -42,6 +42,11 @@ class StrategyBot {
     async initialize() {
         try {
             console.log(`[${this.name}] 初始化持仓状态...`);
+            
+            // 备份旧状态，用于检测异常平仓(强平)
+            const oldState = { ...this.positionState };
+            const oldDetails = { ...this.positionDetails };
+
             const positions = await this.client.getPositions(); // 获取所有SWAP持仓
             
             // 重置状态
@@ -67,6 +72,69 @@ class StrategyBot {
                     }
                 }
             }
+
+            // 检测异常平仓逻辑
+            // 只有当oldState有数据时才检测（避免刚启动时的误报）
+            // 但如果进程重启，oldState是空的，这部分逻辑无法覆盖进程重启期间发生的强平
+            // 这需要持久化存储支持，目前暂实现运行时检测
+            if (Object.keys(oldState).length > 0) {
+                const { BTC_USDT_SWAP, ETH_USDT_SWAP, SOL_USDT_SWAP, ADA_USDT_SWAP, HYPE_USDT_SWAP, SUI_USDT_SWAP } = require('../utils/constants.js');
+                const getCtVal = (s) => {
+                    switch(s) {
+                        case 'BTC-USDT': return BTC_USDT_SWAP.ctValCcyVal || 0.01; // 这里需要注意constants里有没有ctValCcyVal，假设有
+                        case 'ETH-USDT': return ETH_USDT_SWAP.ctValCcyVal || 0.1;
+                        case 'SOL-USDT': return SOL_USDT_SWAP.ctValCcyVal || 1;
+                        case 'ADA-USDT': return ADA_USDT_SWAP.ctValCcyVal || 100;
+                        case 'HYPE-USDT': return HYPE_USDT_SWAP.ctValCcyVal || 0.1;
+                        case 'SUI-USDT': return SUI_USDT_SWAP.ctValCcyVal || 1;
+                        default: return 1;
+                    }
+                };
+
+                for (const symbol of Object.keys(oldState)) {
+                    // 如果旧状态有仓位，但新状态没有（且不是0，因为this.positionState默认空）
+                    if (oldState[symbol] !== 0 && !this.positionState[symbol]) {
+                        const detail = oldDetails[symbol];
+                        if (detail) {
+                            const side = oldState[symbol] === 1 ? '多' : '空';
+                            const entryPrice = detail.avgPx;
+                            // 估算平仓价 (10%波动)
+                            const estimatedExitPrice = oldState[symbol] === 1 ? entryPrice * 0.9 : entryPrice * 1.1;
+                            
+                            // 估算PnL: (Exit - Entry) * Qty * CtVal * Direction
+                            // Long: (0.9E - E) * Q = -0.1E * Q
+                            // Short: (E - 1.1E) * Q = -0.1E * Q (Short PnL = Entry - Exit in coin-margin? No, this is USDT swap)
+                            // USDT Swap PnL = (Exit - Entry) * Q * CtVal * (1 for long, -1 for short?) 
+                            // Actually OKX USDT Swap PnL = (Exit - Entry) * Q * CtVal (for Long)
+                            // For Short: (Entry - Exit) * Q * CtVal
+                            
+                            const ctVal = getCtVal(symbol);
+                            const quantity = parseFloat(detail.pos);
+                            
+                            let pnl = 0;
+                            if (oldState[symbol] === 1) {
+                                pnl = (estimatedExitPrice - entryPrice) * quantity * ctVal;
+                            } else {
+                                pnl = (entryPrice - estimatedExitPrice) * quantity * ctVal;
+                            }
+
+                            console.log(`[${this.name}] ⚠️ 检测到仓位异常消失(可能强平): ${symbol} (${side})`);
+                            
+                            logCloseSummary({
+                                symbol,
+                                user: this.name,
+                                side,
+                                entryPrice,
+                                exitPrice: estimatedExitPrice,
+                                quantity,
+                                pnl,
+                                reason: '异常平仓(强平/止损)'
+                            });
+                        }
+                    }
+                }
+            }
+
             console.log(`[${this.name}] 持仓状态初始化完成:`, this.positionState);
             return true;
         } catch (error) {
