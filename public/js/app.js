@@ -106,12 +106,44 @@ function createCard(symbol) {
     const isIgnoreShort = appState.ignoreShortSignals[symbol];
     const posState = appState.positionState[symbol]; // 0, 1, -1
     const baseAmount = appState.baseAmounts[`${symbol}-SWAP`] || 0;
+    const posDetail = appState.positionDetails ? appState.positionDetails[symbol] : null;
     
     // Status Badge
     let statusClass = 'status-none';
     let statusText = '空仓';
-    if (posState === 1) { statusClass = 'status-long'; statusText = '持多'; }
-    if (posState === -1) { statusClass = 'status-short'; statusText = '持空'; }
+    let positionHtml = '';
+
+    if (posState === 1) { 
+        statusClass = 'status-long'; 
+        statusText = '持多'; 
+    }
+    if (posState === -1) { 
+        statusClass = 'status-short'; 
+        statusText = '持空'; 
+    }
+
+    // 构建持仓详情 HTML
+    if (posState !== 0 && posDetail) {
+        const pnlClass = posDetail.upl >= 0 ? 'pnl-positive' : 'pnl-negative';
+        const pnlSign = posDetail.upl >= 0 ? '+' : '';
+        
+        positionHtml = `
+            <div class="position-info ${posState === 1 ? 'long' : 'short'}">
+                <div class="info-row">
+                    <span>持仓量:</span>
+                    <span>${posDetail.pos} 张</span>
+                </div>
+                <div class="info-row">
+                    <span>开仓均价:</span>
+                    <span>${posDetail.avgPx}</span>
+                </div>
+                <div class="info-row">
+                    <span>未实现盈亏:</span>
+                    <span class="${pnlClass}">${pnlSign}${posDetail.upl} U</span>
+                </div>
+            </div>
+        `;
+    }
 
     card.innerHTML = `
         <div class="card-header">
@@ -119,6 +151,8 @@ function createCard(symbol) {
             <span class="status-badge ${statusClass}">${statusText}</span>
         </div>
         
+        ${positionHtml}
+
         <div class="form-row">
             <label>启用交易</label>
             <label class="switch">

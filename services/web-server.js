@@ -77,6 +77,7 @@ function startWebServer(port, botManager) {
                 tradingPairs: TRADING_PAIRS,
                 tradingEnabled: bot.settings.tradingEnabled,
                 positionState: bot.positionState,
+                positionDetails: bot.positionDetails || {}, // 新增：传递详细持仓数据
                 ignoreShortSignals: bot.settings.ignoreShortSignals,
                 longOnly: bot.settings.longOnly,
                 baseAmounts: bot.baseAmounts,

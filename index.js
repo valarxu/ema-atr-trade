@@ -72,6 +72,16 @@ const botManager = {
         
         for (const bot of this.bots.values()) {
             console.log(`\n--- 执行用户: ${bot.name} ---`);
+            
+            // 关键修正：每次执行策略前，先同步最新的持仓状态
+            // 这确保了如果用户手动操作了仓位，或者程序重启，状态能保持一致
+            try {
+                await bot.initialize();
+            } catch (initError) {
+                console.error(`[${bot.name}] 同步持仓失败，跳过本次执行: ${initError.message}`);
+                continue;
+            }
+
             let report = `<b>📊 ${bot.name} 监控报告</b> (${executionTime})\n\n`;
             let hasError = false;
 

@@ -87,6 +87,28 @@ header {
 .status-short { background-color: #c62828; color: white; }
 .status-none { background-color: #424242; color: #aaa; }
 
+.position-info {
+    margin-bottom: 15px;
+    padding: 10px;
+    background-color: #252525;
+    border-radius: 4px;
+    font-size: 0.9em;
+    border-left: 3px solid #666;
+}
+
+.position-info.long { border-left-color: #2e7d32; }
+.position-info.short { border-left-color: #c62828; }
+
+.info-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 4px;
+}
+.info-row:last-child { margin-bottom: 0; }
+
+.pnl-positive { color: #4caf50; }
+.pnl-negative { color: #f44336; }
+
 /* Form Elements */
 .form-row {
     margin-bottom: 12px;

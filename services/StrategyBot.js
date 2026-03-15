@@ -27,6 +27,7 @@ class StrategyBot {
         this.positionState = {}; // { 'BTC-USDT': 1/0/-1 }
         this.longEntryPrice = {};
         this.longAddedHalfOnce = {};
+        this.positionDetails = {}; // 存储详细持仓信息: { 'BTC-USDT': { upl: 0, avgPx: 0, pos: 0 } }
         
         // 默认金额配置 (从常量加载，但允许用户覆盖)
         const { POSITION_USDT } = require('../utils/constants.js');
@@ -43,6 +44,7 @@ class StrategyBot {
             
             // 重置状态
             this.positionState = {};
+            this.positionDetails = {}; // 重置详情
             
             // 填充持仓
             for (const pos of positions) {
@@ -50,6 +52,13 @@ class StrategyBot {
                     const symbol = pos.instId.replace('-SWAP', '');
                     this.positionState[symbol] = pos.posSide === 'long' ? 1 : -1;
                     
+                    // 存储详细信息
+                    this.positionDetails[symbol] = {
+                        upl: parseFloat(pos.upl),
+                        avgPx: parseFloat(pos.avgPx),
+                        pos: parseFloat(pos.pos)
+                    };
+
                     // 如果是多单，尝试恢复开仓价(近似值)
                     if (pos.posSide === 'long') {
                         this.longEntryPrice[symbol] = parseFloat(pos.avgPx);
@@ -137,6 +146,7 @@ class StrategyBot {
             tradingEnabled: this.settings.tradingEnabled[symbol],
             ignoreShortSignal: this.settings.ignoreShortSignals[symbol],
             longOnly: this.settings.longOnly[symbol],
+            positionDetail: this.positionDetails[symbol] || null, // 传递详细持仓信息
             tradeAction: action
         };
     }
