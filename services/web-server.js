@@ -1,6 +1,9 @@
 const express = require('express');
-const basicAuth = require('express-basic-auth');
 const path = require('path');
+const crypto = require('crypto');
+
+// 简单的内存会话存储
+const sessions = new Map();
 
 /**
  * 启动Web控制面板
@@ -10,60 +13,76 @@ const path = require('path');
 function startWebServer(port, botManager) {
     const app = express();
     
-    // 自定义认证逻辑：从BotManager中获取所有用户的账号密码
-    const getUnauthorizedResponse = (req) => {
-        return req.auth
-            ? ('Credentials rejected')
-            : ('No credentials provided');
-    };
-
-    app.use(basicAuth({
-        authorizer: (username, password) => {
-            const bots = botManager.getAllBots();
-            // 查找匹配的用户
-            const user = bots.find(bot => bot.username === username && bot.password === password);
-            if (user) {
-                return true;
-            }
-            // 同时也支持 .env 中的全局管理员账号(如果配置了的话)
-            const globalUser = process.env.WEB_USER;
-            const globalPass = process.env.WEB_PASS;
-            if (globalUser && globalPass && username === globalUser && password === globalPass) {
-                return true;
-            }
-            return false;
-        },
-        challenge: true,
-        realm: 'TradeBotControlPanel',
-        unauthorizedResponse: getUnauthorizedResponse
-    }));
-
-    // 中间件：将当前登录的用户绑定到 req.currentUser
-    app.use((req, res, next) => {
-        const auth = req.auth;
-        if (auth) {
-            const bots = botManager.getAllBots();
-            const userBot = bots.find(bot => bot.username === auth.user);
-            if (userBot) {
-                req.currentUser = userBot;
-            } else {
-                // 如果是全局管理员登录，可能没有对应的bot实例，或者赋予超级权限
-                // 这里简单处理：如果是全局管理员，默认取第一个bot或者全部权限
-                // 为了简化，我们假设全局管理员也可以管理所有，但在单用户视图下，我们默认展示第一个启用的Bot
-                if (auth.user === process.env.WEB_USER) {
-                    req.currentUser = bots[0]; 
-                    req.isGlobalAdmin = true;
-                }
-            }
-        }
-        next();
-    });
-
     app.use(express.json());
     app.use(express.static(path.join(__dirname, '../public')));
 
+    // API: 登录
+    app.post('/api/login', (req, res) => {
+        const { username, password } = req.body;
+        const bots = botManager.getAllBots();
+        const user = bots.find(bot => bot.username === username && bot.password === password);
+        
+        let isValid = false;
+        let isAdmin = false;
+
+        if (user) {
+            isValid = true;
+        } else if (username === process.env.WEB_USER && password === process.env.WEB_PASS) {
+            isValid = true;
+            isAdmin = true;
+        }
+
+        if (isValid) {
+            // 生成一个随机 token
+            const token = crypto.randomBytes(32).toString('hex');
+            sessions.set(token, { username, isAdmin });
+            res.json({ success: true, token });
+        } else {
+            res.status(401).json({ error: '账号或密码错误' });
+        }
+    });
+
+    // API: 登出
+    app.post('/api/logout', (req, res) => {
+        const authHeader = req.headers.authorization;
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+            const token = authHeader.split(' ')[1];
+            sessions.delete(token);
+        }
+        res.json({ success: true });
+    });
+
+    // 认证中间件
+    const authMiddleware = (req, res, next) => {
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({ error: '未登录' });
+        }
+
+        const token = authHeader.split(' ')[1];
+        const session = sessions.get(token);
+
+        if (!session) {
+            return res.status(401).json({ error: '会话已过期，请重新登录' });
+        }
+
+        const bots = botManager.getAllBots();
+        if (session.isAdmin) {
+            req.currentUser = bots[0]; 
+            req.isGlobalAdmin = true;
+        } else {
+            const userBot = bots.find(b => b.username === session.username);
+            if (userBot) {
+                req.currentUser = userBot;
+            } else {
+                return res.status(401).json({ error: '用户不存在' });
+            }
+        }
+        next();
+    };
+
     // API: 获取当前登录用户的状态
-    app.get('/api/status', async (req, res) => {
+    app.get('/api/status', authMiddleware, async (req, res) => {
         try {
             const bot = req.currentUser;
             if (!bot) return res.status(404).json({ error: '未找到关联的机器人实例' });
@@ -92,7 +111,7 @@ function startWebServer(port, botManager) {
     });
 
     // API: 更新配置
-    app.post('/api/update', async (req, res) => {
+    app.post('/api/update', authMiddleware, async (req, res) => {
         try {
             const { action, symbol, value } = req.body;
             const bot = req.currentUser;

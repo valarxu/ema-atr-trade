@@ -7,10 +7,24 @@ const globalMultiplierInput = document.getElementById('global-multiplier');
 const loadingOverlay = document.getElementById('loading-overlay');
 const userInfoDisplay = document.getElementById('user-info');
 
+// Login Elements
+const loginContainer = document.getElementById('login-container');
+const mainContainer = document.getElementById('main-container');
+const loginUser = document.getElementById('login-user');
+const loginPass = document.getElementById('login-pass');
+const loginSubmit = document.getElementById('login-submit');
+const loginError = document.getElementById('login-error');
+
 // Initialization
 document.addEventListener('DOMContentLoaded', () => {
-    fetchState();
+    checkAuth();
     
+    // Login Handling
+    loginSubmit.addEventListener('click', handleLogin);
+    loginPass.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') handleLogin();
+    });
+
     // Global Multiplier Save Button
     document.getElementById('save-multiplier').addEventListener('click', () => {
         const val = parseFloat(globalMultiplierInput.value);
@@ -35,31 +49,98 @@ document.addEventListener('DOMContentLoaded', () => {
     // Logout Button
     document.getElementById('logout-btn').addEventListener('click', () => {
         if(confirm('确定要登出吗？')) {
-            // 利用浏览器机制清除 Basic Auth 缓存：
-            // 访问一个包含错误凭证的同源URL，强制浏览器丢弃之前的凭证并弹出登录框或返回401
-            const url = new URL(window.location.href);
-            url.username = 'logout';
-            url.password = 'logout';
-            
-            fetch(url.href, { mode: 'no-cors' }).then(() => {
-                // 跳转回首页，此时由于没有凭证或凭证错误，会重新弹出登录框
-                window.location.href = '/';
-            }).catch(() => {
-                window.location.href = '/';
-            });
+            logout();
         }
     });
 });
 
+// --- Auth Functions ---
+function getAuthHeaders() {
+    const token = localStorage.getItem('trade_bot_token');
+    return token ? { 'Authorization': `Bearer ${token}` } : {};
+}
+
+function checkAuth() {
+    const token = localStorage.getItem('trade_bot_token');
+    if (token) {
+        showMain();
+        fetchState();
+    } else {
+        showLogin();
+    }
+}
+
+async function handleLogin() {
+    const username = loginUser.value.trim();
+    const password = loginPass.value.trim();
+    
+    if (!username || !password) {
+        loginError.textContent = '请输入用户名和密码';
+        return;
+    }
+
+    showLoading(true);
+    loginError.textContent = '';
+    
+    try {
+        const res = await fetch('/api/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        });
+        
+        const data = await res.json();
+        
+        if (data.success && data.token) {
+            localStorage.setItem('trade_bot_token', data.token);
+            loginUser.value = '';
+            loginPass.value = '';
+            showMain();
+            fetchState();
+        } else {
+            loginError.textContent = data.error || '登录失败';
+        }
+    } catch (e) {
+        loginError.textContent = '网络请求失败';
+    } finally {
+        showLoading(false);
+    }
+}
+
+async function logout() {
+    try {
+        await fetch('/api/logout', { 
+            method: 'POST',
+            headers: getAuthHeaders()
+        });
+    } catch(e) {}
+    localStorage.removeItem('trade_bot_token');
+    showLogin();
+}
+
+function showLogin() {
+    loginContainer.style.display = 'flex';
+    mainContainer.style.display = 'none';
+}
+
+function showMain() {
+    loginContainer.style.display = 'none';
+    mainContainer.style.display = 'block';
+}
+
+// --- Data Functions ---
 async function fetchState() {
     showLoading(true);
     try {
-        const res = await fetch('/api/status');
+        const res = await fetch('/api/status', {
+            headers: getAuthHeaders()
+        });
+        
         if (res.status === 401) {
-            // Reload to trigger basic auth prompt
-            window.location.reload();
+            logout();
             return;
         }
+        
         if (!res.ok) throw new Error('Failed to fetch state');
         appState = await res.json();
         render();
@@ -73,14 +154,25 @@ async function fetchState() {
 async function updateSetting(action, payload) {
     showLoading(true);
     try {
+        const headers = { 
+            'Content-Type': 'application/json',
+            ...getAuthHeaders()
+        };
+
         const res = await fetch('/api/update', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: headers,
             body: JSON.stringify({ 
                 action, 
                 ...payload 
             })
         });
+        
+        if (res.status === 401) {
+            logout();
+            return;
+        }
+
         const data = await res.json();
         if (data.success) {
             showToast('设置已保存', 'success');

@@ -15,6 +15,46 @@ h1, h2, h3 {
     margin: 0 auto;
 }
 
+/* Login UI */
+.login-wrapper {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+}
+
+.login-box {
+    background-color: #1e1e1e;
+    padding: 30px;
+    border-radius: 8px;
+    width: 300px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.login-box input {
+    padding: 10px;
+    border-radius: 4px;
+    border: 1px solid #444;
+    background-color: #2c2c2c;
+    color: white;
+    font-size: 1em;
+}
+
+.login-box input:focus {
+    outline: none;
+    border-color: #1976d2;
+}
+
+.error-text {
+    color: #f44336;
+    font-size: 0.85em;
+    text-align: center;
+    min-height: 1.2em;
+}
+
 /* Header & Global Settings */
 header {
     display: flex;

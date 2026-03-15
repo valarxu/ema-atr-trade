@@ -7,7 +7,19 @@
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-    <div class="container">
+    <!-- 登录界面 -->
+    <div id="login-container" class="login-wrapper">
+        <div class="login-box">
+            <h2 style="text-align: center; margin-top: 0;">登录控制台</h2>
+            <input type="text" id="login-user" placeholder="用户名" autocomplete="off">
+            <input type="password" id="login-pass" placeholder="密码" autocomplete="off">
+            <button id="login-submit" class="primary" style="margin-top: 10px; padding: 10px;">登录</button>
+            <div id="login-error" class="error-text"></div>
+        </div>
+    </div>
+
+    <!-- 主界面 -->
+    <div class="container" id="main-container" style="display: none;">
         <header>
             <h1>📊 交易策略控制台</h1>
             <div style="display: flex; align-items: center; gap: 15px;">
