@@ -57,10 +57,15 @@ class StrategyBot {
     async runStartupSelfCheck() {
         const check = await this.client.selfCheck();
         this.lastSelfCheck = check;
+        const fp = check.fingerprint
+            ? `apiKey=${check.fingerprint.apiKey}, secretKey=${check.fingerprint.secretKey}, passphrase=${check.fingerprint.passphrase}`
+            : '';
         if (check.ok) {
             console.log(`[${this.name}] OKX 启动自检通过: ${check.summary}`);
+            if (fp) console.log(`[${this.name}] OKX 凭据指纹: ${fp}`);
         } else {
             console.error(`[${this.name}] OKX 启动自检失败: ${check.summary}`);
+            if (fp) console.error(`[${this.name}] OKX 凭据指纹: ${fp}`);
         }
         return check;
     }

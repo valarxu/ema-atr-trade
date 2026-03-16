@@ -31,6 +31,23 @@ class OkxClient {
         return { timestamp, signature };
     }
 
+    _maskCredential(value) {
+        const text = String(value || '');
+        if (!text) return 'empty(len:0)';
+        if (text.length <= 6) {
+            return `${text.slice(0, 1)}***${text.slice(-1)}(len:${text.length})`;
+        }
+        return `${text.slice(0, 3)}***${text.slice(-3)}(len:${text.length})`;
+    }
+
+    getCredentialFingerprint() {
+        return {
+            apiKey: this._maskCredential(this.apiKey),
+            secretKey: this._maskCredential(this.secretKey),
+            passphrase: this._maskCredential(this.passphrase)
+        };
+    }
+
     async _request(method, endpoint, data = null) {
         const requestPath = `/api/v5${endpoint}`;
         const body = data ? JSON.stringify(data) : '';
@@ -79,7 +96,8 @@ class OkxClient {
             timeDiffMs: null,
             code: null,
             msg: null,
-            summary: ''
+            summary: '',
+            fingerprint: this.getCredentialFingerprint()
         };
         try {
             const timeRes = await this._requestPublic('GET', '/public/time');
