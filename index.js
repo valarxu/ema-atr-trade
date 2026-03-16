@@ -30,16 +30,20 @@ const botManager = {
 
                 try {
                     const bot = new StrategyBot(userConfig);
+                    const check = await bot.runStartupSelfCheck();
                     const initSuccess = await bot.initialize();
                     
                     // 无论初始化是否成功（API可能暂时错误/密钥错误），我们都将机器人加入管理器
                     // 这样Web端依然可以登录并修改配置
                     this.bots.set(bot.id, bot);
                     
-                    if (initSuccess) {
+                    if (initSuccess && check.ok) {
                         console.log(`✅ 机器人 ${bot.name} 初始化成功`);
                     } else {
-                        console.error(`⚠️ 机器人 ${bot.name} 初始化失败 (API验证失败或网络错误)`);
+                        console.error(`⚠️ 机器人 ${bot.name} 初始化异常`);
+                        if (!check.ok) {
+                            console.error(`⚠️ ${bot.name} 启动自检: ${check.summary}`);
+                        }
                         console.log(`⚠️ ${bot.name} 将处于离线状态，但您仍可通过Web控制台修改其配置。`);
                     }
                 } catch (e) {
@@ -114,9 +118,15 @@ const botManager = {
             try {
                 const initSuccess = await bot.initialize();
                 if (sendReport) {
+                    if (!initSuccess) {
+                        await bot.runStartupSelfCheck();
+                    }
+                    const selfCheckMsg = bot.lastSelfCheck
+                        ? `\n\n自检: ${bot.lastSelfCheck.ok ? '通过' : '失败'} | ${bot.lastSelfCheck.summary}`
+                        : '';
                     const msg = initSuccess
-                        ? `<b>📌 启动持仓快照</b> (${executionTime})\n\n${bot.buildPositionReport()}`
-                        : `<b>📌 启动持仓快照</b> (${executionTime})\n\n❌ 持仓同步失败（API/网络/权限异常），本次快照不可用`;
+                        ? `<b>📌 启动持仓快照</b> (${executionTime})\n\n${bot.buildPositionReport()}${selfCheckMsg}`
+                        : `<b>📌 启动持仓快照</b> (${executionTime})\n\n❌ 持仓同步失败（API/网络/权限异常），本次快照不可用${selfCheckMsg}`;
                     await bot.notify(msg);
                 }
             } catch (error) {

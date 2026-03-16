@@ -51,6 +51,18 @@ class StrategyBot {
         this.longAddedHalfOnce = {};
         this.positionDetails = {};
         this.baseAmounts = { ...POSITION_USDT };
+        this.lastSelfCheck = null;
+    }
+
+    async runStartupSelfCheck() {
+        const check = await this.client.selfCheck();
+        this.lastSelfCheck = check;
+        if (check.ok) {
+            console.log(`[${this.name}] OKX 启动自检通过: ${check.summary}`);
+        } else {
+            console.error(`[${this.name}] OKX 启动自检失败: ${check.summary}`);
+        }
+        return check;
     }
 
     async initialize() {

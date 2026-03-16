@@ -56,6 +56,70 @@ class OkxClient {
         }
     }
 
+    async _requestPublic(method, endpoint, data = null) {
+        const requestPath = `/api/v5${endpoint}`;
+        try {
+            const response = await axios({
+                method: method,
+                url: `${this.baseUrl}${requestPath}`,
+                data: data
+            });
+            return response.data;
+        } catch (error) {
+            const msg = error.response ? JSON.stringify(error.response.data) : error.message;
+            throw new Error(`OKX 公共请求失败 [${endpoint}]: ${msg}`);
+        }
+    }
+
+    async selfCheck() {
+        const result = {
+            ok: false,
+            serverTimeMs: null,
+            localTimeMs: Date.now(),
+            timeDiffMs: null,
+            code: null,
+            msg: null,
+            summary: ''
+        };
+        try {
+            const timeRes = await this._requestPublic('GET', '/public/time');
+            if (timeRes && timeRes.code === '0' && timeRes.data && timeRes.data[0] && timeRes.data[0].ts) {
+                result.serverTimeMs = Number(timeRes.data[0].ts);
+                result.localTimeMs = Date.now();
+                result.timeDiffMs = result.localTimeMs - result.serverTimeMs;
+            }
+        } catch (e) {}
+
+        try {
+            const cfg = await this._request('GET', '/account/config');
+            if (cfg.code === '0') {
+                result.ok = true;
+                result.summary = `鉴权通过${result.timeDiffMs !== null ? `，时间差 ${result.timeDiffMs}ms` : ''}`;
+                return result;
+            }
+            result.code = cfg.code || null;
+            result.msg = cfg.msg || '未知错误';
+        } catch (e) {
+            const raw = String(e.message || '');
+            const codeMatch = raw.match(/"code":"(\d+)"/);
+            const msgMatch = raw.match(/"msg":"([^"]+)"/);
+            result.code = codeMatch ? codeMatch[1] : null;
+            result.msg = msgMatch ? msgMatch[1] : raw;
+        }
+
+        if (result.code === '50113') {
+            result.summary = `签名无效(50113): 请检查 apiKey/secretKey/passphrase 是否一一对应`;
+        } else if (result.code === '50102') {
+            result.summary = `时间戳异常(50102): 请检查服务器时间同步`;
+        } else {
+            result.summary = `鉴权失败${result.code ? `(${result.code})` : ''}: ${result.msg || '未知原因'}`;
+        }
+        if (result.timeDiffMs !== null && Math.abs(result.timeDiffMs) > 30000) {
+            result.summary += `；本机与OKX时间差约 ${result.timeDiffMs}ms`;
+        }
+        return result;
+    }
+
     // 获取合约信息
     getInstrumentInfo(symbol) {
         const instrumentMap = {
