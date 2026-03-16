@@ -112,9 +112,11 @@ const botManager = {
 
         for (const bot of this.bots.values()) {
             try {
-                await bot.initialize();
+                const initSuccess = await bot.initialize();
                 if (sendReport) {
-                    const msg = `<b>📌 启动持仓快照</b> (${executionTime})\n\n${bot.buildPositionReport()}`;
+                    const msg = initSuccess
+                        ? `<b>📌 启动持仓快照</b> (${executionTime})\n\n${bot.buildPositionReport()}`
+                        : `<b>📌 启动持仓快照</b> (${executionTime})\n\n❌ 持仓同步失败（API/网络/权限异常），本次快照不可用`;
                     await bot.notify(msg);
                 }
             } catch (error) {

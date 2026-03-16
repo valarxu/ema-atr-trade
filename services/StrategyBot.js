@@ -61,6 +61,7 @@ class StrategyBot {
             const oldDetails = { ...this.positionDetails };
 
             const positions = await this.client.getPositions();
+            console.log(`[${this.name}] 交易所返回持仓条数: ${positions.length}`);
             
             this.positionState = {};
             this.positionDetails = {};
@@ -68,16 +69,18 @@ class StrategyBot {
             for (const pos of positions) {
                 if (pos.pos !== '0') {
                     const symbol = pos.instId.replace(/-SWAP$/, '');
-                    if (!TRADING_PAIRS.includes(symbol)) {
-                        continue;
-                    }
-                    const posState = pos.posSide === 'long' ? 1 : -1;
+                    const posSize = parseFloat(pos.pos);
+                    const posState = pos.posSide === 'long'
+                        ? 1
+                        : pos.posSide === 'short'
+                            ? -1
+                            : (posSize >= 0 ? 1 : -1);
                     this.positionState[symbol] = posState;
                     
                     this.positionDetails[symbol] = {
                         upl: parseFloat(pos.upl),
                         avgPx: parseFloat(pos.avgPx),
-                        pos: parseFloat(pos.pos),
+                        pos: posSize,
                         posSide: pos.posSide
                     };
 
@@ -134,7 +137,7 @@ class StrategyBot {
         let hasPosition = false;
         const details = this.positionDetails || {};
 
-        for (const symbol of TRADING_PAIRS) {
+        for (const symbol of Object.keys(details)) {
             const detail = details[symbol];
             if (!detail || !detail.pos || detail.pos === 0) {
                 continue;
