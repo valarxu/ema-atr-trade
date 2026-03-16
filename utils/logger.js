@@ -31,6 +31,7 @@ function logTrade(symbol, type, price, reason) {
 function saveTradeHistory(tradeData) {
     const dataDir = ensureDataDirectory();
     const historyFile = path.join(dataDir, 'trades_history.json');
+    const MAX_RECORDS = 5000;
     
     let history = [];
     if (fs.existsSync(historyFile)) {
@@ -50,8 +51,27 @@ function saveTradeHistory(tradeData) {
     
     history.push(record);
     
-    // 只保留最近1000条记录 (可选)
-    if (history.length > 1000) history = history.slice(-1000);
+    // 归档逻辑
+    if (history.length >= MAX_RECORDS) {
+        // 生成归档文件名: trades_history_archive_YYYY-MM-DD_HH-mm.json
+        const date = new Date();
+        const dateStr = date.toISOString().replace(/[:.]/g, '-').slice(0, 16); // 2026-03-16T12-30
+        const archiveFile = path.join(dataDir, `trades_history_archive_${dateStr}.json`);
+        
+        try {
+            // 将旧记录写入归档文件
+            fs.writeFileSync(archiveFile, JSON.stringify(history, null, 2));
+            console.log(`交易记录已达到${MAX_RECORDS}条，已归档至: ${archiveFile}`);
+            
+            // 重置当前历史记录为空（或者保留最新的一条？）
+            // 通常归档意味着清空当前主文件，重新开始记录
+            history = []; 
+        } catch (err) {
+            console.error('归档失败:', err);
+            // 如果归档失败，为了防止数据丢失，我们暂时保留数据，只切片
+            history = history.slice(-MAX_RECORDS); 
+        }
+    }
     
     fs.writeFileSync(historyFile, JSON.stringify(history, null, 2));
     return record;

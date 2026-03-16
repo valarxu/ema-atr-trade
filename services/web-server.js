@@ -142,11 +142,11 @@ function startWebServer(port, botManager) {
                 tradingPairs: TRADING_PAIRS,
                 tradingEnabled: bot.settings.tradingEnabled,
                 positionState: bot.positionState,
-                positionDetails: bot.positionDetails || {}, // 新增：传递详细持仓数据
-                ignoreShortSignals: bot.settings.ignoreShortSignals,
-                longOnly: bot.settings.longOnly,
+                positionDetails: bot.positionDetails || {},
+                allowLong: bot.settings.allowLong,
+                allowShort: bot.settings.allowShort,
                 baseAmounts: bot.baseAmounts,
-                globalPositionMultiplier: bot.settings.multiplier,
+                pairMultipliers: bot.settings.pairMultipliers,
                 isGlobalAdmin: !!req.isGlobalAdmin
             };
             res.json(state);
@@ -169,8 +169,8 @@ function startWebServer(port, botManager) {
             const { TRADING_PAIRS, POSITION_USDT } = require('../utils/constants.js');
 
             switch (action) {
-                case 'setGlobalMultiplier':
-                    if (value > 0) bot.settings.multiplier = value;
+                case 'setPairMultiplier':
+                    if (TRADING_PAIRS.includes(symbol) && value > 0) bot.settings.pairMultipliers[symbol] = value;
                     break;
                 case 'enableAll':
                     for (const p of TRADING_PAIRS) bot.settings.tradingEnabled[p] = true;
@@ -178,17 +178,17 @@ function startWebServer(port, botManager) {
                 case 'disableAll':
                     for (const p of TRADING_PAIRS) bot.settings.tradingEnabled[p] = false;
                     break;
-                case 'resetAllShortSignals':
-                    for (const p of TRADING_PAIRS) bot.settings.ignoreShortSignals[p] = false;
+                case 'enableAllShort':
+                    for (const p of TRADING_PAIRS) bot.settings.allowShort[p] = true;
                     break;
                 case 'setPairEnabled':
                     if (TRADING_PAIRS.includes(symbol)) bot.settings.tradingEnabled[symbol] = value;
                     break;
-                case 'setPairLongOnly':
-                    if (TRADING_PAIRS.includes(symbol)) bot.settings.longOnly[symbol] = value;
+                case 'setPairAllowLong':
+                    if (TRADING_PAIRS.includes(symbol)) bot.settings.allowLong[symbol] = value;
                     break;
-                case 'setPairIgnoreShort':
-                    if (TRADING_PAIRS.includes(symbol)) bot.settings.ignoreShortSignals[symbol] = value;
+                case 'setPairAllowShort':
+                    if (TRADING_PAIRS.includes(symbol)) bot.settings.allowShort[symbol] = value;
                     break;
                 case 'setPairAmount':
                     const swapKey = `${symbol}-SWAP`;
@@ -198,8 +198,8 @@ function startWebServer(port, botManager) {
                     const swapK = `${symbol}-SWAP`;
                     if (POSITION_USDT.hasOwnProperty(swapK)) bot.baseAmounts[swapK] = POSITION_USDT[swapK];
                     break;
-                case 'resetPairShortSignal':
-                    if (TRADING_PAIRS.includes(symbol)) bot.settings.ignoreShortSignals[symbol] = false;
+                case 'enablePairShort':
+                    if (TRADING_PAIRS.includes(symbol)) bot.settings.allowShort[symbol] = true;
                     break;
                 default:
                     throw new Error(`未知的操作类型: ${action}`);

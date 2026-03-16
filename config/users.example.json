@@ -13,10 +13,10 @@
       "passphrase": "YOUR_PASSPHRASE"
     },
     "settings": {
-      "multiplier": 1.0,
       "tradingEnabled": {},
-      "ignoreShortSignals": {},
-      "longOnly": {}
+      "allowLong": {},
+      "allowShort": {},
+      "pairMultipliers": {}
     }
   }
 ]

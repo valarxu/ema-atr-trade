@@ -6,7 +6,6 @@ require('dotenv').config();
 const { startWebServer } = require('./services/web-server');
 const StrategyBot = require('./services/StrategyBot');
 const { TRADING_PAIRS } = require('./utils/constants.js');
-const { sendToTelegram } = require('./services/telegram');
 
 // 机器人管理器
 const botManager = {
@@ -65,16 +64,9 @@ const botManager = {
     async executeAllStrategies() {
         const executionTime = new Date().toLocaleString();
         console.log(`\n=== 开始执行策略任务 [${executionTime}] ===`);
-
-        // 按交易对遍历，而不是按用户遍历
-        // 这样可以确保每个交易对的行情只获取一次（由MarketService缓存控制），然后分发给所有用户
-        // 但为了逻辑清晰，我们还是按用户遍历，依赖MarketService的缓存机制
         
         for (const bot of this.bots.values()) {
             console.log(`\n--- 执行用户: ${bot.name} ---`);
-            
-            // 关键修正：每次执行策略前，先同步最新的持仓状态
-            // 这确保了如果用户手动操作了仓位，或者程序重启，状态能保持一致
             try {
                 await bot.initialize();
             } catch (initError) {
@@ -82,7 +74,7 @@ const botManager = {
                 continue;
             }
 
-            let report = `<b>📊 ${bot.name} 监控报告</b> (${executionTime})\n\n`;
+            let monitorSection = `<b>📊 监控报告</b> (${executionTime})\n\n`;
             let hasError = false;
 
             for (const symbol of TRADING_PAIRS) {
@@ -91,64 +83,42 @@ const botManager = {
                     
                     const coinMessage = `<b>🔸 ${symbol.replace('-USDT', '')} (${result.currentClose.toFixed(2)})</b>\n` +
                         `偏离: ${result.priceDistance.toFixed(2)} | 持仓: ${result.positionState === 0 ? '无' : result.positionState === 1 ? '多🟢' : '空🔴'}\n` +
+                        `允许做多: ${result.allowLong ? '是' : '否'} | 允许做空: ${result.allowShort ? '是' : '否'}\n` +
                         `${result.tradeAction !== '无' ? '🔔 信号: ' + result.tradeAction : ''}\n`;
                     
-                    report += coinMessage;
+                    monitorSection += coinMessage;
                 } catch (error) {
                     console.error(`[${bot.name}] 处理${symbol}失败: ${error.message}`);
-                    report += `❌ ${symbol}: ${error.message}\n`;
+                    monitorSection += `❌ ${symbol}: ${error.message}\n`;
                     hasError = true;
                 }
             }
 
-            // 发送报告
-            console.log(report.replace(/<[^>]+>/g, '')); // 打印无HTML标签的日志
-            await bot.notify(report);
+            await bot.initialize();
+            const positionSection = bot.buildPositionReport();
+            const fullReport = `${monitorSection}\n${positionSection}`;
+            
+            console.log(fullReport.replace(/<[^>]+>/g, ''));
+            await bot.notify(fullReport);
             
             if (hasError) await bot.notify(`⚠️ 检测到执行错误，请检查日志`);
         }
         console.log(`=== 任务执行结束 ===\n`);
     },
 
-    // 检查持仓并报告
-    async checkAndReportPositions() {
+    async syncPositions(sendReport = false, title = '持仓同步') {
         const executionTime = new Date().toLocaleString();
-        console.log(`\n=== 检查持仓状态 [${executionTime}] ===`);
+        console.log(`\n=== ${title} [${executionTime}] ===`);
 
         for (const bot of this.bots.values()) {
             try {
-                // 重新同步持仓
                 await bot.initialize();
-                
-                let msg = `<b>📈 持仓日报</b> (${executionTime})\n\n`;
-                let totalProfit = 0;
-                let hasPosition = false;
-
-                // 由于bot.initialize已经获取了最新持仓并更新了state，这里直接读取bot.positionDetails即可
-                // 无需再次调用API，节省请求
-                // bot.positionDetails 格式: { 'BTC-USDT': { upl: 0, avgPx: 0, pos: 0 } }
-                
-                const details = bot.positionDetails || {};
-                
-                for (const symbol of Object.keys(details)) {
-                    const detail = details[symbol];
-                    if (detail && detail.pos !== '0' && detail.pos !== 0) {
-                        hasPosition = true;
-                        const profit = parseFloat(detail.upl);
-                        const side = bot.positionState[symbol] === 1 ? '多🟢' : '空🔴';
-                        
-                        totalProfit += profit;
-                        msg += `<b>🔹 ${symbol}</b> | ${side} | 盈亏: ${profit > 0 ? '+' : ''}${profit.toFixed(2)}\n`;
-                    }
+                if (sendReport) {
+                    const msg = `<b>📌 启动持仓快照</b> (${executionTime})\n\n${bot.buildPositionReport()}`;
+                    await bot.notify(msg);
                 }
-
-                if (!hasPosition) msg += "当前无持仓\n";
-                else msg += `\n<b>💰 总盈亏: ${totalProfit > 0 ? '+' : ''}${totalProfit.toFixed(2)} USDT</b>`;
-
-                await bot.notify(msg);
-
             } catch (error) {
-                console.error(`[${bot.name}] 持仓检查失败: ${error.message}`);
+                console.error(`[${bot.name}] 持仓同步失败: ${error.message}`);
             }
         }
     }
@@ -169,8 +139,8 @@ async function startup() {
     // 2. 启动Web服务器
     startWebServer(3020, botManager);
 
-    // 3. 立即执行一次
-    await botManager.executeAllStrategies();
+    // 3. 启动时仅同步持仓并发送一次持仓快照，不执行交易
+    await botManager.syncPositions(true, '启动持仓同步');
 
     // 4. 设置定时任务
     // 策略执行: 4小时一次
@@ -178,9 +148,9 @@ async function startup() {
         botManager.executeAllStrategies();
     }, { timezone: "Asia/Shanghai" });
 
-    // 持仓报告: 每天多次
+    // 59分只做持仓同步，不发送消息
     cron.schedule('0 59 3,7,11,15,19,23 * * *', () => {
-        botManager.checkAndReportPositions();
+        botManager.syncPositions(false, '定时持仓同步');
     }, { timezone: "Asia/Shanghai" });
 
     console.log('系统启动完成，定时任务已就绪');

@@ -35,8 +35,9 @@ function setupTelegramBot(cmdHandler) {
 }
 
 // 发送消息到Telegram
-async function sendToTelegram(message) {
-    if (!token || !chatId) {
+async function sendToTelegram(message, targetChatId = null) {
+    const finalChatId = targetChatId || chatId;
+    if (!token || !finalChatId) {
         console.error('Telegram配置缺失，无法发送消息');
         return;
     }
@@ -45,7 +46,7 @@ async function sendToTelegram(message) {
         if (!bot) {
             bot = new TelegramBot(token, { polling: false });
         }
-        await bot.sendMessage(chatId, message, { parse_mode: 'HTML' });
+        await bot.sendMessage(finalChatId, message, { parse_mode: 'HTML' });
         return true;
     } catch (error) {
         console.error('发送Telegram消息失败:', error);
