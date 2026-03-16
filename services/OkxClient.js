@@ -12,9 +12,9 @@ const {
 
 class OkxClient {
     constructor(config) {
-        this.apiKey = config.apiKey;
-        this.secretKey = config.secretKey;
-        this.passphrase = config.passphrase;
+        this.apiKey = String(config.apiKey || '').trim();
+        this.secretKey = String(config.secretKey || '').trim();
+        this.passphrase = String(config.passphrase || '').trim();
         this.baseUrl = 'https://www.okx.com';
         
         if (!this.apiKey || !this.secretKey || !this.passphrase) {
