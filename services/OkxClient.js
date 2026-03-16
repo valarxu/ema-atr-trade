@@ -48,16 +48,24 @@ class OkxClient {
         };
     }
 
-    async _request(method, endpoint, data = null) {
-        const requestPath = `/api/v5${endpoint}`;
-        const body = data ? JSON.stringify(data) : '';
+    _buildQueryString(params = {}) {
+        return Object.entries(params)
+            .filter(([, value]) => value !== undefined && value !== null && value !== '')
+            .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+            .join('&');
+    }
+
+    async _request(method, endpoint, data = null, params = null) {
+        const queryString = this._buildQueryString(params || {});
+        const requestPath = `/api/v5${endpoint}${queryString ? `?${queryString}` : ''}`;
+        const body = method === 'GET' ? '' : (data ? JSON.stringify(data) : '');
         const { timestamp, signature } = this._sign(method, requestPath, body);
 
         try {
             const response = await axios({
                 method: method,
                 url: `${this.baseUrl}${requestPath}`,
-                data: data,
+                data: method === 'GET' ? undefined : data,
                 headers: {
                     'OK-ACCESS-KEY': this.apiKey,
                     'OK-ACCESS-SIGN': signature,
@@ -201,18 +209,12 @@ class OkxClient {
 
     // 获取持仓
     async getPositions(instIds = []) {
-        let endpoint = '/account/positions';
+        const params = { instType: 'SWAP' };
         if (instIds.length > 0) {
-            endpoint += `?instId=${instIds.join(',')}`; // 注意：API通常只支持单个或特定格式，这里假设只需传instType或单个
-            // OKX API GET /api/v5/account/positions 支持 instId 参数
-            // 如果有多个，可能需要多次调用或不传instId获取所有
-            // 简单起见，如果列表不为空，我们尝试只获取SWAP类型的持仓并过滤
-            endpoint = '/account/positions?instType=SWAP'; 
-        } else {
-             endpoint = '/account/positions?instType=SWAP';
+            params.instId = instIds.join(',');
         }
-        
-        const res = await this._request('GET', endpoint);
+
+        const res = await this._request('GET', '/account/positions', null, params);
         if (res.code !== '0') throw new Error(`获取持仓失败: ${res.msg}`);
         
         // 如果指定了instIds，在客户端过滤
