@@ -50,7 +50,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (confirm('确定禁用所有交易对吗？')) updateSetting('disableAll', {});
     });
     document.getElementById('enable-all-short').addEventListener('click', () => {
-        if (confirm('确定恢复所有交易对的做空权限吗？')) updateSetting('enableAllShort', {});
+        if (confirm('确定恢复所有交易对的空头信号状态吗？')) updateSetting('resetAllShortSignalState', {});
     });
 
     document.getElementById('logout-btn').addEventListener('click', () => {
@@ -285,8 +285,8 @@ function createCard(symbol) {
     const card = document.createElement('div');
     card.className = 'card';
     const enabled = !!appState.tradingEnabled[symbol];
-    const allowLong = !!appState.allowLong[symbol];
-    const allowShort = !!appState.allowShort[symbol];
+    const tradeMode = appState.tradeMode[symbol] || 'both';
+    const shortSignalState = appState.shortSignalState[symbol] || 'normal';
     const posState = appState.positionState[symbol] || 0;
     const baseAmount = Number(appState.baseAmounts[`${symbol}-SWAP`] || 0);
     const pairMultiplier = Number(appState.pairMultipliers[symbol] || 1);
@@ -316,8 +316,20 @@ function createCard(symbol) {
         </div>
         ${positionHtml}
         <div class="form-row"><label>启用交易</label><label class="switch"><input type="checkbox" ${enabled ? 'checked' : ''} onchange="togglePair('${symbol}','enabled',this.checked)"><span class="slider"></span></label></div>
-        <div class="form-row"><label>允许做多</label><label class="switch"><input type="checkbox" ${allowLong ? 'checked' : ''} onchange="togglePair('${symbol}','allowLong',this.checked)"><span class="slider"></span></label></div>
-        <div class="form-row"><label>允许做空</label><label class="switch"><input type="checkbox" ${allowShort ? 'checked' : ''} onchange="togglePair('${symbol}','allowShort',this.checked)"><span class="slider"></span></label></div>
+        <div class="form-row compact-split">
+            <label>交易模式</label>
+            <select id="mode-${symbol}" onchange="togglePair('${symbol}','tradeMode',this.value)">
+                <option value="both" ${tradeMode === 'both' ? 'selected' : ''}>双向</option>
+                <option value="long_only" ${tradeMode === 'long_only' ? 'selected' : ''}>只做多</option>
+            </select>
+        </div>
+        <div class="form-row compact-split">
+            <label>空头信号</label>
+            <select id="short-state-${symbol}" onchange="togglePair('${symbol}','shortSignalState',this.value)">
+                <option value="normal" ${shortSignalState === 'normal' ? 'selected' : ''}>正常</option>
+                <option value="ignored_temporarily" ${shortSignalState === 'ignored_temporarily' ? 'selected' : ''}>临时忽略</option>
+            </select>
+        </div>
         <div class="form-row compact-split">
             <label>基础金额</label>
             <input type="number" value="${baseAmount}" id="amount-${symbol}">
@@ -329,7 +341,7 @@ function createCard(symbol) {
         <div class="form-row actions">
             <button class="small primary" onclick="savePair('${symbol}')">保存</button>
             <button class="small" onclick="resetAmount('${symbol}')">重置金额</button>
-            <button class="small" onclick="enableShort('${symbol}')">恢复做空</button>
+            <button class="small" onclick="resetShortSignalState('${symbol}')">恢复空头信号</button>
         </div>
     `;
     return card;
@@ -337,8 +349,8 @@ function createCard(symbol) {
 
 window.togglePair = (symbol, key, value) => {
     if (key === 'enabled') return updateSetting('setPairEnabled', { symbol, value });
-    if (key === 'allowLong') return updateSetting('setPairAllowLong', { symbol, value });
-    if (key === 'allowShort') return updateSetting('setPairAllowShort', { symbol, value });
+    if (key === 'tradeMode') return updateSetting('setPairTradeMode', { symbol, value });
+    if (key === 'shortSignalState') return updateSetting('setPairShortSignalState', { symbol, value });
 };
 
 window.savePair = (symbol) => {
@@ -349,7 +361,7 @@ window.savePair = (symbol) => {
 };
 
 window.resetAmount = (symbol) => updateSetting('resetPairAmount', { symbol });
-window.enableShort = (symbol) => updateSetting('enablePairShort', { symbol });
+window.resetShortSignalState = (symbol) => updateSetting('resetPairShortSignalState', { symbol });
 
 function showLoading(show) {
     if (show) loadingOverlay.classList.add('visible');

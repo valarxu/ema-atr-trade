@@ -14,8 +14,8 @@
     },
     "settings": {
       "tradingEnabled": {},
-      "allowLong": {},
-      "allowShort": {},
+      "tradeMode": {},
+      "shortSignalState": {},
       "pairMultipliers": {}
     }
   }

@@ -50,12 +50,12 @@
   - 平空后评估开多（两种场景）：[index.js:252-261](file:///d:/my_programs/Trade/ema-atr-trade/index.js#L252-L261), [index.js:306-311](file:///d:/my_programs/Trade/ema-atr-trade/index.js#L306-L311)
 
 ## 特殊模式与信号
-- 只做多模式（longOnly）
-  - 作用：阻断所有新的开空路径；若当前持有空仓，将立即平空并复评估是否开多  
-    位置参考：[index.js:239-261](file:///d:/my_programs/Trade/ema-atr-trade/index.js#L239-L261)
-- 忽略做空信号（ignoreShortSignals）
-  - 作用：临时忽略做空的触发；当价格重新回到 EMA 上方时自动重置  
-    位置参考：[index.js:144-148](file:///d:/my_programs/Trade/ema-atr-trade/index.js#L144-L148)
+- 交易模式（tradeMode）
+  - `both`：允许开多和开空
+  - `long_only`：只允许开多；若当前持有空仓，将在下一轮策略中触发平空
+- 空头信号状态（shortSignalState）
+  - `normal`：允许按策略触发开空
+  - `ignored_temporarily`：临时忽略开空；当价格重新回到 EMA 上方时自动恢复为 `normal`
 
 ## 日志与报告
 - 逐币种交易日志：logs/trades_<symbol>_YYYY_MM.txt（每次开平/加仓都会记录）  

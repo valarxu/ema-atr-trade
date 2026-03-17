@@ -20,26 +20,17 @@ class StrategyBot {
         
         this.settings = userConfig.settings || {};
         this.settings.tradingEnabled = this.settings.tradingEnabled || {};
-        this.settings.allowLong = this.settings.allowLong || {};
-        this.settings.allowShort = this.settings.allowShort || {};
+        this.settings.tradeMode = this.settings.tradeMode || {};
+        this.settings.shortSignalState = this.settings.shortSignalState || {};
         this.settings.pairMultipliers = this.settings.pairMultipliers || {};
-        const legacyLongOnly = this.settings.longOnly || {};
-        const legacyIgnoreShort = this.settings.ignoreShortSignals || {};
 
         const legacyGlobalMultiplier = this.settings.multiplier || 1.0;
         for (const symbol of TRADING_PAIRS) {
-            if (typeof this.settings.allowLong[symbol] !== 'boolean') {
-                this.settings.allowLong[symbol] = true;
+            if (this.settings.tradeMode[symbol] !== 'both' && this.settings.tradeMode[symbol] !== 'long_only') {
+                this.settings.tradeMode[symbol] = 'both';
             }
-            if (typeof this.settings.allowShort[symbol] !== 'boolean') {
-                this.settings.allowShort[symbol] = true;
-            }
-            if (legacyLongOnly[symbol] === true) {
-                this.settings.allowLong[symbol] = true;
-                this.settings.allowShort[symbol] = false;
-            }
-            if (legacyIgnoreShort[symbol] === true) {
-                this.settings.allowShort[symbol] = false;
+            if (this.settings.shortSignalState[symbol] !== 'normal' && this.settings.shortSignalState[symbol] !== 'ignored_temporarily') {
+                this.settings.shortSignalState[symbol] = 'normal';
             }
             if (!this.settings.pairMultipliers[symbol] || this.settings.pairMultipliers[symbol] <= 0) {
                 this.settings.pairMultipliers[symbol] = legacyGlobalMultiplier;
@@ -187,9 +178,9 @@ class StrategyBot {
                 return this._buildResult(symbol, marketData, '交易已禁用');
             }
 
-            if (previousClose > historicalEMA120 && this.settings.allowShort[symbol] === false) {
-                this.settings.allowShort[symbol] = true;
-                console.log(`[${this.name}] ${symbol} 价格回EMA上方，恢复允许做空`);
+            if (previousClose > historicalEMA120 && this.settings.shortSignalState[symbol] === 'ignored_temporarily') {
+                this.settings.shortSignalState[symbol] = 'normal';
+                console.log(`[${this.name}] ${symbol} 价格回EMA上方，空头信号恢复为正常`);
             }
 
             let tradeAction = '无';
@@ -228,8 +219,8 @@ class StrategyBot {
             priceDistance: marketData.priceDistance,
             positionState: this.positionState[symbol] || 0,
             tradingEnabled: this.settings.tradingEnabled[symbol],
-            allowLong: this.settings.allowLong[symbol],
-            allowShort: this.settings.allowShort[symbol],
+            tradeMode: this.settings.tradeMode[symbol],
+            shortSignalState: this.settings.shortSignalState[symbol],
             pairMultiplier: this.settings.pairMultipliers[symbol] || 1,
             positionDetail: this.positionDetails[symbol] || null,
             tradeAction: action
@@ -245,7 +236,6 @@ class StrategyBot {
         const amount = baseAmount * (this.settings.pairMultipliers[symbol] || 1);
 
         if ((checkType === 'both' || checkType === 'checkLong') && 
-            this.settings.allowLong[symbol] &&
             priceToCheck > historicalEMA120 && distance > ATR_MULTIPLIER) {
             
             await this.client.placeOrder(swapSymbol, priceToCheck, 'long', amount);
@@ -259,7 +249,8 @@ class StrategyBot {
         }
         
         if ((checkType === 'both' || checkType === 'checkShort') && 
-            this.settings.allowShort[symbol] &&
+            this.settings.tradeMode[symbol] === 'both' &&
+            this.settings.shortSignalState[symbol] === 'normal' &&
             priceToCheck < historicalEMA120 && distance < -ATR_MULTIPLIER) {
             
             await this.client.placeOrder(swapSymbol, priceToCheck, 'short', amount);
@@ -332,13 +323,13 @@ class StrategyBot {
         let reason = '';
         let nextCheck = 'checkLong';
 
-        if (!this.settings.allowShort[symbol]) {
+        if (this.settings.tradeMode[symbol] !== 'both') {
             shouldClose = true;
-            reason = '不允许做空，关闭空仓';
+            reason = '当前模式不允许做空，关闭空仓';
         } else if (priceDistance < -SHORT_TAKE_PROFIT_ATR_MULTIPLIER) {
             shouldClose = true;
             reason = `做空止盈触发，偏离${priceDistance.toFixed(2)}ATR`;
-            this.settings.allowShort[symbol] = false;
+            this.settings.shortSignalState[symbol] = 'ignored_temporarily';
         } else if (previousClose > historicalEMA120) {
             shouldClose = true;
             reason = '价格突破EMA';

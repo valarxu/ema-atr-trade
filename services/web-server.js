@@ -143,8 +143,8 @@ function startWebServer(port, botManager) {
                 tradingEnabled: bot.settings.tradingEnabled,
                 positionState: bot.positionState,
                 positionDetails: bot.positionDetails || {},
-                allowLong: bot.settings.allowLong,
-                allowShort: bot.settings.allowShort,
+                tradeMode: bot.settings.tradeMode,
+                shortSignalState: bot.settings.shortSignalState,
                 baseAmounts: bot.baseAmounts,
                 pairMultipliers: bot.settings.pairMultipliers,
                 isGlobalAdmin: !!req.isGlobalAdmin
@@ -178,17 +178,21 @@ function startWebServer(port, botManager) {
                 case 'disableAll':
                     for (const p of TRADING_PAIRS) bot.settings.tradingEnabled[p] = false;
                     break;
-                case 'enableAllShort':
-                    for (const p of TRADING_PAIRS) bot.settings.allowShort[p] = true;
+                case 'resetAllShortSignalState':
+                    for (const p of TRADING_PAIRS) bot.settings.shortSignalState[p] = 'normal';
                     break;
                 case 'setPairEnabled':
                     if (TRADING_PAIRS.includes(symbol)) bot.settings.tradingEnabled[symbol] = value;
                     break;
-                case 'setPairAllowLong':
-                    if (TRADING_PAIRS.includes(symbol)) bot.settings.allowLong[symbol] = value;
+                case 'setPairTradeMode':
+                    if (TRADING_PAIRS.includes(symbol) && (value === 'both' || value === 'long_only')) {
+                        bot.settings.tradeMode[symbol] = value;
+                    }
                     break;
-                case 'setPairAllowShort':
-                    if (TRADING_PAIRS.includes(symbol)) bot.settings.allowShort[symbol] = value;
+                case 'setPairShortSignalState':
+                    if (TRADING_PAIRS.includes(symbol) && (value === 'normal' || value === 'ignored_temporarily')) {
+                        bot.settings.shortSignalState[symbol] = value;
+                    }
                     break;
                 case 'setPairAmount':
                     const swapKey = `${symbol}-SWAP`;
@@ -198,8 +202,8 @@ function startWebServer(port, botManager) {
                     const swapK = `${symbol}-SWAP`;
                     if (POSITION_USDT.hasOwnProperty(swapK)) bot.baseAmounts[swapK] = POSITION_USDT[swapK];
                     break;
-                case 'enablePairShort':
-                    if (TRADING_PAIRS.includes(symbol)) bot.settings.allowShort[symbol] = true;
+                case 'resetPairShortSignalState':
+                    if (TRADING_PAIRS.includes(symbol)) bot.settings.shortSignalState[symbol] = 'normal';
                     break;
                 default:
                     throw new Error(`未知的操作类型: ${action}`);

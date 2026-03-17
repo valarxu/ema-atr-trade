@@ -5,7 +5,126 @@ require('dotenv').config();
 
 const { startWebServer } = require('./services/web-server');
 const StrategyBot = require('./services/StrategyBot');
+const { setupTelegramBot } = require('./services/telegram');
 const { TRADING_PAIRS } = require('./utils/constants.js');
+
+function normalizeSymbol(input) {
+    if (!input) return null;
+    const raw = input.trim().toUpperCase();
+    if (TRADING_PAIRS.includes(raw)) return raw;
+    if (TRADING_PAIRS.includes(`${raw}-USDT`)) return `${raw}-USDT`;
+    return null;
+}
+
+function getPrimaryBot(botManager) {
+    const bots = botManager.getAllBots();
+    return bots.length > 0 ? bots[0] : null;
+}
+
+function createTelegramCommandHandler(botManager) {
+    return (text) => {
+        const bot = getPrimaryBot(botManager);
+        if (!bot) {
+            return '❌ 当前没有可控制的机器人实例';
+        }
+
+        const input = (text || '').trim();
+        if (!input) {
+            return '❌ 命令为空，发送 /帮助 查看用法';
+        }
+
+        const [cmd, ...args] = input.split(/\s+/);
+
+        if (cmd === '/帮助' || cmd.toLowerCase() === '/help') {
+            return [
+                '<b>🧭 控制命令</b>',
+                '/状态 [交易对]',
+                '/模式 交易对 双向|只做多',
+                '/空头 交易对 正常|临时忽略',
+                '/启用 交易对 开|关',
+                '/恢复空头 [交易对|ALL]'
+            ].join('\n');
+        }
+
+        if (cmd === '/状态') {
+            const symbol = normalizeSymbol(args[0]);
+            if (args[0] && !symbol) {
+                return `❌ 交易对无效: ${args[0]}`;
+            }
+            const targets = symbol ? [symbol] : TRADING_PAIRS;
+            const lines = targets.map((pair) => {
+                const enabled = bot.settings.tradingEnabled[pair] ? '开' : '关';
+                const mode = bot.settings.tradeMode[pair] === 'long_only' ? '只做多' : '双向';
+                const shortState = bot.settings.shortSignalState[pair] === 'ignored_temporarily' ? '临时忽略' : '正常';
+                return `${pair}: 交易=${enabled} | 模式=${mode} | 空头信号=${shortState}`;
+            });
+            return `<b>📌 当前参数</b>\n${lines.join('\n')}`;
+        }
+
+        if (cmd === '/模式') {
+            const symbol = normalizeSymbol(args[0]);
+            if (!symbol) return '❌ 用法: /模式 交易对 双向|只做多';
+            const modeRaw = args[1];
+            const modeMap = {
+                both: 'both',
+                '双向': 'both',
+                long_only: 'long_only',
+                '只做多': 'long_only'
+            };
+            const mode = modeMap[modeRaw];
+            if (!mode) return '❌ 模式仅支持: 双向 或 只做多';
+            bot.settings.tradeMode[symbol] = mode;
+            return `✅ ${symbol} 交易模式已更新为: ${mode === 'long_only' ? '只做多' : '双向'}`;
+        }
+
+        if (cmd === '/空头') {
+            const symbol = normalizeSymbol(args[0]);
+            if (!symbol) return '❌ 用法: /空头 交易对 正常|临时忽略';
+            const stateRaw = args[1];
+            const stateMap = {
+                normal: 'normal',
+                '正常': 'normal',
+                ignored_temporarily: 'ignored_temporarily',
+                ignored: 'ignored_temporarily',
+                '忽略': 'ignored_temporarily',
+                '临时忽略': 'ignored_temporarily'
+            };
+            const state = stateMap[stateRaw];
+            if (!state) return '❌ 空头状态仅支持: 正常 或 临时忽略';
+            bot.settings.shortSignalState[symbol] = state;
+            return `✅ ${symbol} 空头信号状态已更新为: ${state === 'normal' ? '正常' : '临时忽略'}`;
+        }
+
+        if (cmd === '/启用') {
+            const symbol = normalizeSymbol(args[0]);
+            if (!symbol) return '❌ 用法: /启用 交易对 开|关';
+            const statusRaw = args[1];
+            const onWords = ['开', 'on', 'true', '1'];
+            const offWords = ['关', 'off', 'false', '0'];
+            let status = null;
+            if (onWords.includes((statusRaw || '').toLowerCase()) || onWords.includes(statusRaw)) status = true;
+            if (offWords.includes((statusRaw || '').toLowerCase()) || offWords.includes(statusRaw)) status = false;
+            if (typeof status !== 'boolean') return '❌ 启用状态仅支持: 开 或 关';
+            bot.settings.tradingEnabled[symbol] = status;
+            return `✅ ${symbol} 交易已${status ? '开启' : '关闭'}`;
+        }
+
+        if (cmd === '/恢复空头') {
+            if (!args[0] || args[0].toUpperCase() === 'ALL') {
+                for (const pair of TRADING_PAIRS) {
+                    bot.settings.shortSignalState[pair] = 'normal';
+                }
+                return '✅ 已恢复全部交易对的空头信号状态为正常';
+            }
+            const symbol = normalizeSymbol(args[0]);
+            if (!symbol) return '❌ 用法: /恢复空头 [交易对|ALL]';
+            bot.settings.shortSignalState[symbol] = 'normal';
+            return `✅ ${symbol} 空头信号状态已恢复为正常`;
+        }
+
+        return '❌ 未知命令，发送 /帮助 查看用法';
+    };
+}
 
 // 机器人管理器
 const botManager = {
@@ -87,7 +206,7 @@ const botManager = {
                     
                     const coinMessage = `<b>🔸 ${symbol.replace('-USDT', '')} (${result.currentClose.toFixed(2)})</b>\n` +
                         `偏离: ${result.priceDistance.toFixed(2)} | 持仓: ${result.positionState === 0 ? '无' : result.positionState === 1 ? '多🟢' : '空🔴'}\n` +
-                        `允许做多: ${result.allowLong ? '是' : '否'} | 允许做空: ${result.allowShort ? '是' : '否'}\n` +
+                        `模式: ${result.tradeMode === 'long_only' ? '只做多' : '双向'} | 空头信号: ${result.shortSignalState === 'ignored_temporarily' ? '临时忽略' : '正常'}\n` +
                         `${result.tradeAction !== '无' ? '🔔 信号: ' + result.tradeAction : ''}\n`;
                     
                     monitorSection += coinMessage;
@@ -151,10 +270,13 @@ async function startup() {
     // 2. 启动Web服务器
     startWebServer(3020, botManager);
 
-    // 3. 启动时仅同步持仓并发送一次持仓快照，不执行交易
+    // 3. 启动Telegram命令控制
+    setupTelegramBot(createTelegramCommandHandler(botManager));
+
+    // 4. 启动时仅同步持仓并发送一次持仓快照，不执行交易
     await botManager.syncPositions(true, '启动持仓同步');
 
-    // 4. 设置定时任务
+    // 5. 设置定时任务
     // 策略执行: 4小时一次
     cron.schedule('15 0 0,4,8,12,16,20 * * *', () => {
         botManager.executeAllStrategies();
