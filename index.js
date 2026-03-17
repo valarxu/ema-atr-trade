@@ -203,23 +203,9 @@ const botManager = {
             for (const symbol of TRADING_PAIRS) {
                 try {
                     const result = await bot.processSymbol(symbol);
-                    const positionSize = result.positionDetail && result.positionDetail.pos
-                        ? Number(result.positionDetail.pos)
-                        : 0;
-                    const notionalUsdt = result.positionDetail && result.positionDetail.notionalUsdt
-                        ? Number(result.positionDetail.notionalUsdt)
-                        : 0;
-                    const displayNotional = notionalUsdt >= 1000 ? notionalUsdt.toFixed(0) : notionalUsdt.toFixed(2);
-                    const positionText = result.positionState === 0
-                        ? '无'
-                        : result.positionState === 1
-                            ? `多🟢 | 约${displayNotional}U (${positionSize}张)`
-                            : `空🔴 | 约${displayNotional}U (${positionSize}张)`;
-                    
-                    const coinMessage = `<b>🔸 ${symbol.replace('-USDT', '')} (${result.currentClose.toFixed(2)})</b>\n` +
-                        `偏离: ${result.priceDistance.toFixed(2)} | 持仓: ${positionText}\n` +
+                    const coinMessage = `<b>🔸 ${symbol.replace('-USDT', '')} (${result.currentClose.toFixed(2)}) | 偏离: ${result.priceDistance.toFixed(2)}</b>\n` +
                         `模式: ${result.tradeMode === 'long_only' ? '只做多' : '双向'} | 空头信号: ${result.shortSignalState === 'ignored_temporarily' ? '临时忽略' : '正常'}\n` +
-                        `${result.tradeAction !== '无' ? '🔔 信号: ' + result.tradeAction : ''}\n`;
+                        `操作: ${result.tradeAction || '无'}\n`;
                     
                     monitorSection += coinMessage;
                 } catch (error) {

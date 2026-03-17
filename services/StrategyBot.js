@@ -162,13 +162,12 @@ class StrategyBot {
             }
             hasPosition = true;
             const profit = Number(detail.upl || 0);
-            const side = (this.positionState[symbol] || 0) === 1 ? '多🟢' : '空🔴';
+            const side = (this.positionState[symbol] || 0) === 1 ? '多' : '空';
             const displaySymbol = symbol.replace('-USDT', '');
-            const positionSize = Number(detail.pos);
             const notionalUsdt = Number(detail.notionalUsdt || 0);
             const displayNotional = notionalUsdt >= 1000 ? notionalUsdt.toFixed(0) : notionalUsdt.toFixed(2);
             totalProfit += profit;
-            report += `<b>🔹 ${displaySymbol}</b> | ${side} | 仓位约: ${displayNotional}U (${positionSize}张) | 盈亏: ${profit >= 0 ? '+' : ''}${profit.toFixed(2)}\n`;
+            report += `<b>${displaySymbol}</b> | ${side} | 仓位约：${displayNotional}U | ${profit >= 0 ? '+' : ''}${profit.toFixed(2)}\n`;
         }
 
         if (!hasPosition) {
