@@ -153,8 +153,10 @@ class StrategyBot {
             hasPosition = true;
             const profit = Number(detail.upl || 0);
             const side = (this.positionState[symbol] || 0) === 1 ? '多🟢' : '空🔴';
+            const displaySymbol = symbol.replace('-USDT', '');
+            const positionSize = Number(detail.pos);
             totalProfit += profit;
-            report += `<b>🔹 ${symbol}</b> | ${side} | 盈亏: ${profit >= 0 ? '+' : ''}${profit.toFixed(2)}\n`;
+            report += `<b>🔹 ${displaySymbol}</b> | ${side} | 仓位: ${positionSize} | 盈亏: ${profit >= 0 ? '+' : ''}${profit.toFixed(2)}\n`;
         }
 
         if (!hasPosition) {

@@ -203,9 +203,12 @@ const botManager = {
             for (const symbol of TRADING_PAIRS) {
                 try {
                     const result = await bot.processSymbol(symbol);
+                    const positionSize = result.positionDetail && result.positionDetail.pos
+                        ? Number(result.positionDetail.pos)
+                        : 0;
                     
                     const coinMessage = `<b>🔸 ${symbol.replace('-USDT', '')} (${result.currentClose.toFixed(2)})</b>\n` +
-                        `偏离: ${result.priceDistance.toFixed(2)} | 持仓: ${result.positionState === 0 ? '无' : result.positionState === 1 ? '多🟢' : '空🔴'}\n` +
+                        `偏离: ${result.priceDistance.toFixed(2)} | 持仓: ${result.positionState === 0 ? '无' : result.positionState === 1 ? `多🟢(${positionSize})` : `空🔴(${positionSize})`}\n` +
                         `模式: ${result.tradeMode === 'long_only' ? '只做多' : '双向'} | 空头信号: ${result.shortSignalState === 'ignored_temporarily' ? '临时忽略' : '正常'}\n` +
                         `${result.tradeAction !== '无' ? '🔔 信号: ' + result.tradeAction : ''}\n`;
                     
@@ -240,12 +243,9 @@ const botManager = {
                     if (!initSuccess) {
                         await bot.runStartupSelfCheck();
                     }
-                    const selfCheckMsg = bot.lastSelfCheck
-                        ? `\n\n自检: ${bot.lastSelfCheck.ok ? '通过' : '失败'} | ${bot.lastSelfCheck.summary}`
-                        : '';
                     const msg = initSuccess
-                        ? `<b>📌 启动持仓快照</b> (${executionTime})\n\n${bot.buildPositionReport()}${selfCheckMsg}`
-                        : `<b>📌 启动持仓快照</b> (${executionTime})\n\n❌ 持仓同步失败（API/网络/权限异常），本次快照不可用${selfCheckMsg}`;
+                        ? `<b>📌 启动持仓快照</b> (${executionTime})\n\n${bot.buildPositionReport()}`
+                        : `<b>📌 启动持仓快照</b> (${executionTime})\n\n❌ 持仓同步失败（API/网络/权限异常），本次快照不可用`;
                     await bot.notify(msg);
                 }
             } catch (error) {

@@ -22,8 +22,14 @@ function setupTelegramBot(cmdHandler) {
         bot.on('message', (msg) => {
             // 只处理来自指定聊天的消息，且不处理机器人自己的消息
             if (msg.chat.id.toString() === chatId && commandHandler && !msg.from.is_bot) {
-                const response = commandHandler(msg.text);
-                bot.sendMessage(chatId, response, { parse_mode: 'HTML' });
+                const text = (msg.text || '').trim();
+                if (!text.startsWith('/')) {
+                    return;
+                }
+                const response = commandHandler(text);
+                if (response) {
+                    bot.sendMessage(chatId, response, { parse_mode: 'HTML' });
+                }
             }
         });
 
