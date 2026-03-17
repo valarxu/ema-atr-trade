@@ -206,9 +206,18 @@ const botManager = {
                     const positionSize = result.positionDetail && result.positionDetail.pos
                         ? Number(result.positionDetail.pos)
                         : 0;
+                    const notionalUsdt = result.positionDetail && result.positionDetail.notionalUsdt
+                        ? Number(result.positionDetail.notionalUsdt)
+                        : 0;
+                    const displayNotional = notionalUsdt >= 1000 ? notionalUsdt.toFixed(0) : notionalUsdt.toFixed(2);
+                    const positionText = result.positionState === 0
+                        ? '无'
+                        : result.positionState === 1
+                            ? `多🟢 | 约${displayNotional}U (${positionSize}张)`
+                            : `空🔴 | 约${displayNotional}U (${positionSize}张)`;
                     
                     const coinMessage = `<b>🔸 ${symbol.replace('-USDT', '')} (${result.currentClose.toFixed(2)})</b>\n` +
-                        `偏离: ${result.priceDistance.toFixed(2)} | 持仓: ${result.positionState === 0 ? '无' : result.positionState === 1 ? `多🟢(${positionSize})` : `空🔴(${positionSize})`}\n` +
+                        `偏离: ${result.priceDistance.toFixed(2)} | 持仓: ${positionText}\n` +
                         `模式: ${result.tradeMode === 'long_only' ? '只做多' : '双向'} | 空头信号: ${result.shortSignalState === 'ignored_temporarily' ? '临时忽略' : '正常'}\n` +
                         `${result.tradeAction !== '无' ? '🔔 信号: ' + result.tradeAction : ''}\n`;
                     

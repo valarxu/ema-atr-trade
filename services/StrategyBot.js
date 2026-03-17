@@ -91,6 +91,16 @@ class StrategyBot {
                         pos: posSize,
                         posSide: pos.posSide
                     };
+                    const instrumentInfo = this.client.getInstrumentInfo(`${symbol}-SWAP`);
+                    const ctVal = instrumentInfo ? Number(instrumentInfo.ctVal) : 0;
+                    const avgPx = parseFloat(pos.avgPx);
+                    const rawNotionalUsd = Number(pos.notionalUsd || pos.notionalCcy || pos.notional || 0);
+                    const estimatedNotionalUsd = Number.isFinite(ctVal) && ctVal > 0 && Number.isFinite(avgPx)
+                        ? Math.abs(posSize) * ctVal * avgPx
+                        : 0;
+                    this.positionDetails[symbol].notionalUsdt = rawNotionalUsd !== 0
+                        ? Math.abs(rawNotionalUsd)
+                        : estimatedNotionalUsd;
 
                     this.longEntryPrice[symbol] = parseFloat(pos.avgPx);
                 }
@@ -155,8 +165,10 @@ class StrategyBot {
             const side = (this.positionState[symbol] || 0) === 1 ? '多🟢' : '空🔴';
             const displaySymbol = symbol.replace('-USDT', '');
             const positionSize = Number(detail.pos);
+            const notionalUsdt = Number(detail.notionalUsdt || 0);
+            const displayNotional = notionalUsdt >= 1000 ? notionalUsdt.toFixed(0) : notionalUsdt.toFixed(2);
             totalProfit += profit;
-            report += `<b>🔹 ${displaySymbol}</b> | ${side} | 仓位: ${positionSize} | 盈亏: ${profit >= 0 ? '+' : ''}${profit.toFixed(2)}\n`;
+            report += `<b>🔹 ${displaySymbol}</b> | ${side} | 仓位约: ${displayNotional}U (${positionSize}张) | 盈亏: ${profit >= 0 ? '+' : ''}${profit.toFixed(2)}\n`;
         }
 
         if (!hasPosition) {
