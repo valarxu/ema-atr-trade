@@ -38,7 +38,7 @@ function createTelegramCommandHandler(botManager) {
         if (cmd === '/帮助' || cmd.toLowerCase() === '/help') {
             return [
                 '<b>🧭 控制命令</b>',
-                '/状态 [交易对]',
+                '/状态 [交易对] (含金额)',
                 '/模式 交易对 双向|只做多',
                 '/空头 交易对 正常|临时忽略',
                 '/启用 交易对 开|关',
@@ -56,7 +56,12 @@ function createTelegramCommandHandler(botManager) {
                 const enabled = bot.settings.tradingEnabled[pair] ? '开' : '关';
                 const mode = bot.settings.tradeMode[pair] === 'long_only' ? '只做多' : '双向';
                 const shortState = bot.settings.shortSignalState[pair] === 'ignored_temporarily' ? '临时忽略' : '正常';
-                return `${pair}: 交易=${enabled} | 模式=${mode} | 空头信号=${shortState}`;
+                const baseAmount = Number(bot.baseAmounts[`${pair}-SWAP`] || 0);
+                const pairMultiplier = Number(bot.settings.pairMultipliers[pair] || 1);
+                const openAmount = baseAmount * pairMultiplier;
+                const displayBase = baseAmount >= 100 ? baseAmount.toFixed(0) : baseAmount.toFixed(2);
+                const displayOpen = openAmount >= 100 ? openAmount.toFixed(0) : openAmount.toFixed(2);
+                return `${pair}: 交易=${enabled} | 模式=${mode} | 空头信号=${shortState} | 金额=${displayBase}U×${pairMultiplier.toFixed(2)}=${displayOpen}U`;
             });
             return `<b>📌 当前参数</b>\n${lines.join('\n')}`;
         }
