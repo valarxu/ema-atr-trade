@@ -2,7 +2,7 @@ let appState = null;
 let currentTargetUserId = null;
 let isAdminMode = false;
 let pnlChart = null;
-let btcTestNextAction = 'open';
+let lastHistoryData = [];
 
 const container = document.getElementById('cards-container');
 const loadingOverlay = document.getElementById('loading-overlay');
@@ -18,8 +18,6 @@ const loginUser = document.getElementById('login-user');
 const loginPass = document.getElementById('login-pass');
 const loginSubmit = document.getElementById('login-submit');
 const loginError = document.getElementById('login-error');
-const btcTestAmount = document.getElementById('btc-test-amount');
-const btcTestToggleBtn = document.getElementById('btc-test-toggle');
 
 document.addEventListener('DOMContentLoaded', () => {
     checkAuth();
@@ -55,7 +53,6 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('enable-all-short').addEventListener('click', () => {
         if (confirm('确定恢复所有交易对的空头信号状态吗？')) updateSetting('resetAllShortSignalState', {});
     });
-    btcTestToggleBtn.addEventListener('click', () => runBtcTestToggle());
 
     document.getElementById('logout-btn').addEventListener('click', () => {
         if (confirm('确定要登出吗？')) logout();
@@ -171,7 +168,6 @@ async function fetchState() {
         }
 
         render();
-        syncBtcTestButtonByState();
     } catch (err) {
         showToast(`加载状态失败: ${err.message}`, 'error');
     } finally {
@@ -209,6 +205,7 @@ async function fetchHistory() {
         const res = await fetch(url, { headers: getAuthHeaders() });
         if (res.status === 401) return logout();
         const history = await res.json();
+        lastHistoryData = history;
         renderHistoryTable(history);
         renderHistoryChart(history);
     } catch (e) {
@@ -218,45 +215,10 @@ async function fetchHistory() {
     }
 }
 
-function syncBtcTestButtonByState() {
-    const btcState = appState && appState.positionState ? Number(appState.positionState['BTC-USDT'] || 0) : 0;
-    btcTestNextAction = btcState === 0 ? 'open' : 'close';
-    btcTestToggleBtn.textContent = btcTestNextAction === 'open' ? 'BTC测试开多' : 'BTC测试平仓';
-}
-
-async function runBtcTestToggle() {
-    const amount = Number(btcTestAmount.value);
-    if (!Number.isFinite(amount) || amount <= 0) {
-        showToast('请输入有效的测试金额', 'error');
-        return;
-    }
-    showLoading(true);
-    try {
-        const bodyData = { amount };
-        if (isAdminMode && currentTargetUserId) bodyData.userId = currentTargetUserId;
-        const res = await fetch('/api/test-btc-toggle', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-            body: JSON.stringify(bodyData)
-        });
-        if (res.status === 401) return logout();
-        const data = await res.json();
-        if (!data.success) throw new Error(data.error || 'BTC测试失败');
-        btcTestNextAction = data.nextAction || (data.action === 'open' ? 'close' : 'open');
-        btcTestToggleBtn.textContent = btcTestNextAction === 'open' ? 'BTC测试开多' : 'BTC测试平仓';
-        showToast(data.message || 'BTC测试执行成功', 'success');
-        await fetchState();
-    } catch (err) {
-        showToast(`BTC测试失败: ${err.message}`, 'error');
-    } finally {
-        showLoading(false);
-    }
-}
-
 function renderHistoryTable(history) {
     historyTableBody.innerHTML = '';
     if (history.length === 0) {
-        historyTableBody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:#666;">暂无记录</td></tr>';
+        historyTableBody.innerHTML = '<tr><td colspan="9" style="text-align:center; color:#666;">暂无记录</td></tr>';
         return;
     }
     history.forEach(item => {
@@ -272,9 +234,32 @@ function renderHistoryTable(history) {
             <td>${item.quantity}</td>
             <td class="${pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}">${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}</td>
             <td>${item.reason}</td>
+            <td><button class="small" onclick="editHistory('${item.id}')">编辑</button></td>
         `;
         historyTableBody.appendChild(row);
     });
+}
+
+async function saveHistoryEdit(payload) {
+    showLoading(true);
+    try {
+        const bodyData = { ...payload };
+        if (isAdminMode && currentTargetUserId) bodyData.userId = currentTargetUserId;
+        const res = await fetch('/api/history/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+            body: JSON.stringify(bodyData)
+        });
+        if (res.status === 401) return logout();
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || '保存失败');
+        showToast('交易记录已更新', 'success');
+        await fetchHistory();
+    } catch (err) {
+        showToast(`更新失败: ${err.message}`, 'error');
+    } finally {
+        showLoading(false);
+    }
 }
 
 function renderHistoryChart(history) {
@@ -402,6 +387,31 @@ window.savePair = (symbol) => {
 
 window.resetAmount = (symbol) => updateSetting('resetPairAmount', { symbol });
 window.resetShortSignalState = (symbol) => updateSetting('resetPairShortSignalState', { symbol });
+window.editHistory = (id) => {
+    if (!id) return;
+    const source = lastHistoryData.find(h => h.id === id);
+    if (!source) {
+        showToast('未找到记录', 'error');
+        return;
+    }
+    const symbol = (prompt('交易对', source.symbol || '') || '').trim().toUpperCase();
+    if (!symbol) return;
+    const side = (prompt('方向(多/空)', source.side || '') || '').trim();
+    if (side !== '多' && side !== '空') {
+        showToast('方向仅支持 多 或 空', 'error');
+        return;
+    }
+    const entryPrice = Number(prompt('开仓价', String(source.entryPrice ?? '')));
+    const exitPrice = Number(prompt('平仓价', String(source.exitPrice ?? '')));
+    const quantity = Number(prompt('数量(张)', String(source.quantity ?? '')));
+    const pnl = Number(prompt('盈亏(USDT)', String(source.pnl ?? '')));
+    const reason = (prompt('原因', source.reason || '') || '').trim();
+    if (!Number.isFinite(entryPrice) || !Number.isFinite(exitPrice) || !Number.isFinite(quantity) || !Number.isFinite(pnl)) {
+        showToast('价格/数量/盈亏必须是数字', 'error');
+        return;
+    }
+    saveHistoryEdit({ id, symbol, side, entryPrice, exitPrice, quantity, pnl, reason });
+};
 
 function showLoading(show) {
     if (show) loadingOverlay.classList.add('visible');

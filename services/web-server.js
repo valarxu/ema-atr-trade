@@ -1,7 +1,6 @@
 const express = require('express');
 const path = require('path');
 const crypto = require('crypto');
-const marketService = require('./MarketService');
 
 // 简单的内存会话存储
 const sessions = new Map();
@@ -128,6 +127,48 @@ function startWebServer(port, botManager) {
         res.json(userHistory);
     });
 
+    app.post('/api/history/update', authMiddleware, (req, res) => {
+        try {
+            const { updateTradeHistoryRecord } = require('../utils/logger');
+            const bot = req.currentUser;
+            if (!bot) return res.status(404).json({ success: false, error: '用户未关联机器人' });
+
+            const payload = req.body || {};
+            const id = String(payload.id || '').trim();
+            const symbol = String(payload.symbol || '').trim().toUpperCase();
+            const side = String(payload.side || '').trim();
+            const reason = String(payload.reason || '').trim();
+            const entryPrice = Number(payload.entryPrice);
+            const exitPrice = Number(payload.exitPrice);
+            const quantity = Number(payload.quantity);
+            const pnl = Number(payload.pnl);
+
+            if (!id) return res.status(400).json({ success: false, error: '缺少记录ID' });
+            if (!symbol) return res.status(400).json({ success: false, error: '交易对不能为空' });
+            if (side !== '多' && side !== '空') return res.status(400).json({ success: false, error: '方向仅支持多或空' });
+            if (!Number.isFinite(entryPrice) || !Number.isFinite(exitPrice) || !Number.isFinite(quantity) || !Number.isFinite(pnl)) {
+                return res.status(400).json({ success: false, error: '价格、数量、盈亏必须是数字' });
+            }
+            if (quantity <= 0) return res.status(400).json({ success: false, error: '数量必须大于0(单位:张)' });
+
+            const updated = updateTradeHistoryRecord({
+                id,
+                user: bot.name,
+                symbol,
+                side,
+                entryPrice,
+                exitPrice,
+                quantity,
+                pnl,
+                reason
+            });
+            res.json({ success: true, record: updated });
+        } catch (error) {
+            console.error('更新交易记录失败:', error);
+            res.status(400).json({ success: false, error: error.message });
+        }
+    });
+
     // API: 获取当前登录用户的状态
     app.get('/api/status', authMiddleware, async (req, res) => {
         try {
@@ -214,47 +255,6 @@ function startWebServer(port, botManager) {
         } catch (error) {
             console.error('更新状态失败:', error);
             res.status(400).json({ error: error.message });
-        }
-    });
-
-    app.post('/api/test-btc-toggle', authMiddleware, async (req, res) => {
-        try {
-            const bot = req.currentUser;
-            if (!bot) return res.status(404).json({ error: '用户未关联机器人' });
-
-            const amount = Number(req.body.amount);
-            if (!Number.isFinite(amount) || amount <= 0) {
-                return res.status(400).json({ success: false, error: '金额必须是大于0的数字' });
-            }
-
-            const symbol = 'BTC-USDT';
-            const swapSymbol = `${symbol}-SWAP`;
-            const positions = await bot.client.getPositions([swapSymbol]);
-            const activePositions = positions.filter(p => p.pos !== '0');
-
-            if (activePositions.length > 0) {
-                await bot.client.closePosition(swapSymbol, positions);
-                await bot.initialize();
-                return res.json({
-                    success: true,
-                    action: 'close',
-                    nextAction: 'open',
-                    message: 'BTC测试平仓已提交'
-                });
-            }
-
-            const marketData = await marketService.getMarketAnalysis(symbol);
-            await bot.client.placeOrder(swapSymbol, marketData.currentClose, 'long', amount);
-            await bot.initialize();
-            return res.json({
-                success: true,
-                action: 'open',
-                nextAction: 'close',
-                message: `BTC测试开多已提交，金额 ${amount}`
-            });
-        } catch (error) {
-            console.error('BTC测试开平失败:', error);
-            res.status(400).json({ success: false, error: error.message });
         }
     });
 

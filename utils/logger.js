@@ -124,8 +124,44 @@ function getTradeHistory() {
     return [];
 }
 
+function updateTradeHistoryRecord(payload) {
+    const dataDir = ensureDataDirectory();
+    const historyFile = path.join(dataDir, 'trades_history.json');
+    if (!fs.existsSync(historyFile)) {
+        throw new Error('交易历史文件不存在');
+    }
+
+    let history = [];
+    try {
+        history = JSON.parse(fs.readFileSync(historyFile, 'utf8'));
+    } catch (e) {
+        throw new Error('读取交易历史失败');
+    }
+
+    const index = history.findIndex(item => item.id === payload.id && item.user === payload.user);
+    if (index === -1) {
+        throw new Error('未找到可编辑的交易记录');
+    }
+
+    const nextRecord = {
+        ...history[index],
+        symbol: payload.symbol,
+        side: payload.side,
+        entryPrice: Number(payload.entryPrice),
+        exitPrice: Number(payload.exitPrice),
+        quantity: Number(payload.quantity),
+        pnl: Number(payload.pnl),
+        reason: payload.reason
+    };
+
+    history[index] = nextRecord;
+    fs.writeFileSync(historyFile, JSON.stringify(history, null, 2));
+    return nextRecord;
+}
+
 module.exports = {
     logTrade,
     logCloseSummary,
-    getTradeHistory
+    getTradeHistory,
+    updateTradeHistoryRecord
 }; 

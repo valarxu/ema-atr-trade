@@ -126,8 +126,11 @@ class StrategyBot {
                             const side = oldState[symbol] === 1 ? '多' : '空';
                             const entryPrice = detail.avgPx;
                             const estimatedExitPrice = oldState[symbol] === 1 ? entryPrice * 0.9 : entryPrice * 1.1;
-                            const quantity = parseFloat(detail.pos);
-                            const pnl = (oldState[symbol] === 1 ? -0.1 : -0.1) * entryPrice * quantity;
+                            const quantity = Math.abs(parseFloat(detail.pos));
+                            const instrumentInfo = this.client.getInstrumentInfo(`${symbol}-SWAP`);
+                            const ctVal = instrumentInfo ? Number(instrumentInfo.ctVal) : 1;
+                            const notionalUsdt = entryPrice * quantity * ctVal;
+                            const pnl = -0.1 * notionalUsdt;
 
                             console.log(`[${this.name}] ⚠️ 检测到仓位异常消失(可能强平): ${symbol} (${side})`);
                             
