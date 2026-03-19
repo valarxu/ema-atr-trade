@@ -135,19 +135,37 @@ class StrategyBot {
                             
                             try {
                                 const fills = await this.client.getFills('SWAP', `${symbol}-SWAP`);
-                                // 查找最近一次平仓该方向的成交记录
                                 // side为多，说明当时是多头，平仓动作是sell；side为空，说明当时是空头，平仓动作是buy
                                 const closeAction = oldState[symbol] === 1 ? 'sell' : 'buy';
-                                const recentCloseFill = fills.find(f => f.side === closeAction);
                                 
-                                if (recentCloseFill) {
-                                    estimatedExitPrice = parseFloat(recentCloseFill.fillPx);
+                                // 根据 orderId 分组最近的这笔平仓订单的所有成交明细
+                                // fills 接口返回的数据是按时间倒序排的，找到第一笔符合方向的记录，提取它的 orderId
+                                const firstMatch = fills.find(f => f.side === closeAction);
+                                
+                                if (firstMatch) {
+                                    const targetOrderId = firstMatch.ordId;
+                                    // 找出这个 orderId 的所有成交分片
+                                    const orderFills = fills.filter(f => f.ordId === targetOrderId);
+                                    
+                                    // 计算加权平均价：(成交价1*数量1 + 成交价2*数量2) / 总数量
+                                    let totalFillSz = 0;
+                                    let totalNotional = 0;
+                                    
+                                    orderFills.forEach(f => {
+                                        const sz = parseFloat(f.fillSz);
+                                        const px = parseFloat(f.fillPx);
+                                        totalFillSz += sz;
+                                        totalNotional += (sz * px);
+                                    });
+                                    
+                                    estimatedExitPrice = totalFillSz > 0 ? (totalNotional / totalFillSz) : parseFloat(firstMatch.fillPx);
+                                    
                                     // pnl 计算: (平仓价 - 开仓价) * 数量 * 面值 (多头)
                                     // 空头: (开仓价 - 平仓价) * 数量 * 面值
                                     pnl = oldState[symbol] === 1 
                                         ? (estimatedExitPrice - entryPrice) * quantity * ctVal
                                         : (entryPrice - estimatedExitPrice) * quantity * ctVal;
-                                    console.log(`[${this.name}] ✅ 成功获取 ${symbol} 真实平仓价: ${estimatedExitPrice}, 真实盈亏: ${pnl.toFixed(4)}`);
+                                    console.log(`[${this.name}] ✅ 成功获取 ${symbol} 真实平仓均价: ${estimatedExitPrice} (订单 ${targetOrderId} 包含 ${orderFills.length} 笔成交), 真实盈亏: ${pnl.toFixed(4)}`);
                                 } else {
                                     console.log(`[${this.name}] ⚠️ 未找到 ${symbol} 最近的平仓成交记录，使用估算数据。`);
                                 }
