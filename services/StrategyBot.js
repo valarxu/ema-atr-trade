@@ -150,22 +150,34 @@ class StrategyBot {
                                     // 计算加权平均价：(成交价1*数量1 + 成交价2*数量2) / 总数量
                                     let totalFillSz = 0;
                                     let totalNotional = 0;
+                                    let totalFee = 0;
                                     
                                     orderFills.forEach(f => {
                                         const sz = parseFloat(f.fillSz);
                                         const px = parseFloat(f.fillPx);
+                                        const fee = parseFloat(f.fee || 0); // OKX的fee通常为负数(代表扣除)
+                                        
                                         totalFillSz += sz;
                                         totalNotional += (sz * px);
+                                        totalFee += fee;
                                     });
                                     
                                     estimatedExitPrice = totalFillSz > 0 ? (totalNotional / totalFillSz) : parseFloat(firstMatch.fillPx);
                                     
+                                    // 粗略估算开仓时的手续费（由于拿不到开仓准确明细，这里按平仓手续费估算双边）
+                                    // 真实环境里一开一平手续费基本对称，所以直接双倍平仓手续费来当总手续费
+                                    const estimatedTotalFee = totalFee * 2;
+                                    
                                     // pnl 计算: (平仓价 - 开仓价) * 数量 * 面值 (多头)
                                     // 空头: (开仓价 - 平仓价) * 数量 * 面值
-                                    pnl = oldState[symbol] === 1 
+                                    let grossPnl = oldState[symbol] === 1 
                                         ? (estimatedExitPrice - entryPrice) * quantity * ctVal
                                         : (entryPrice - estimatedExitPrice) * quantity * ctVal;
-                                    console.log(`[${this.name}] ✅ 成功获取 ${symbol} 真实平仓均价: ${estimatedExitPrice} (订单 ${targetOrderId} 包含 ${orderFills.length} 笔成交), 真实盈亏: ${pnl.toFixed(4)}`);
+                                        
+                                    // 最终净盈亏 = 账面盈亏 + 手续费 (因为手续费是负数，所以直接加)
+                                    pnl = grossPnl + estimatedTotalFee;
+                                        
+                                    console.log(`[${this.name}] ✅ 成功获取 ${symbol} 真实平仓均价: ${estimatedExitPrice.toFixed(4)} (订单 ${targetOrderId} 包含 ${orderFills.length} 笔成交), 估算总手续费: ${estimatedTotalFee.toFixed(4)}, 净盈亏: ${pnl.toFixed(4)}`);
                                 } else {
                                     console.log(`[${this.name}] ⚠️ 未找到 ${symbol} 最近的平仓成交记录，使用估算数据。`);
                                 }
