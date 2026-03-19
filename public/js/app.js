@@ -3,6 +3,7 @@ let currentTargetUserId = null;
 let isAdminMode = false;
 let pnlChart = null;
 let lastHistoryData = [];
+let editingHistoryId = null;
 
 const container = document.getElementById('cards-container');
 const loadingOverlay = document.getElementById('loading-overlay');
@@ -18,6 +19,16 @@ const loginUser = document.getElementById('login-user');
 const loginPass = document.getElementById('login-pass');
 const loginSubmit = document.getElementById('login-submit');
 const loginError = document.getElementById('login-error');
+const historyEditModal = document.getElementById('history-edit-modal');
+const historyEditSymbol = document.getElementById('history-edit-symbol');
+const historyEditSide = document.getElementById('history-edit-side');
+const historyEditEntry = document.getElementById('history-edit-entry');
+const historyEditExit = document.getElementById('history-edit-exit');
+const historyEditQty = document.getElementById('history-edit-qty');
+const historyEditPnl = document.getElementById('history-edit-pnl');
+const historyEditReason = document.getElementById('history-edit-reason');
+const historyEditCancelBtn = document.getElementById('history-edit-cancel');
+const historyEditSaveBtn = document.getElementById('history-edit-save');
 
 document.addEventListener('DOMContentLoaded', () => {
     checkAuth();
@@ -62,6 +73,14 @@ document.addEventListener('DOMContentLoaded', () => {
         currentTargetUserId = e.target.value;
         if (viewDashboard.style.display !== 'none') fetchState();
         else fetchHistory();
+    });
+    historyEditCancelBtn.addEventListener('click', closeHistoryEditModal);
+    historyEditSaveBtn.addEventListener('click', submitHistoryEdit);
+    historyEditModal.addEventListener('click', (e) => {
+        if (e.target === historyEditModal) closeHistoryEditModal();
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && historyEditModal.classList.contains('visible')) closeHistoryEditModal();
     });
 });
 
@@ -255,11 +274,61 @@ async function saveHistoryEdit(payload) {
         if (!data.success) throw new Error(data.error || '保存失败');
         showToast('交易记录已更新', 'success');
         await fetchHistory();
+        return true;
     } catch (err) {
         showToast(`更新失败: ${err.message}`, 'error');
+        return false;
     } finally {
         showLoading(false);
     }
+}
+
+function openHistoryEditModal(source) {
+    editingHistoryId = source.id;
+    historyEditSymbol.value = source.symbol || '';
+    historyEditSide.value = source.side === '空' ? '空' : '多';
+    historyEditEntry.value = source.entryPrice ?? '';
+    historyEditExit.value = source.exitPrice ?? '';
+    historyEditQty.value = source.quantity ?? '';
+    historyEditPnl.value = source.pnl ?? '';
+    historyEditReason.value = source.reason || '';
+    historyEditModal.classList.add('visible');
+}
+
+function closeHistoryEditModal() {
+    editingHistoryId = null;
+    historyEditModal.classList.remove('visible');
+}
+
+async function submitHistoryEdit() {
+    if (!editingHistoryId) return;
+    const symbol = String(historyEditSymbol.value || '').trim().toUpperCase();
+    const side = String(historyEditSide.value || '').trim();
+    const entryPrice = Number(historyEditEntry.value);
+    const exitPrice = Number(historyEditExit.value);
+    const quantity = Number(historyEditQty.value);
+    const pnl = Number(historyEditPnl.value);
+    const reason = String(historyEditReason.value || '').trim();
+
+    if (!symbol) {
+        showToast('交易对不能为空', 'error');
+        return;
+    }
+    if (side !== '多' && side !== '空') {
+        showToast('方向仅支持 多 或 空', 'error');
+        return;
+    }
+    if (!Number.isFinite(entryPrice) || !Number.isFinite(exitPrice) || !Number.isFinite(quantity) || !Number.isFinite(pnl)) {
+        showToast('价格/数量/盈亏必须是数字', 'error');
+        return;
+    }
+    if (quantity <= 0) {
+        showToast('数量必须大于0(单位:张)', 'error');
+        return;
+    }
+
+    const ok = await saveHistoryEdit({ id: editingHistoryId, symbol, side, entryPrice, exitPrice, quantity, pnl, reason });
+    if (ok) closeHistoryEditModal();
 }
 
 function renderHistoryChart(history) {
@@ -394,23 +463,7 @@ window.editHistory = (id) => {
         showToast('未找到记录', 'error');
         return;
     }
-    const symbol = (prompt('交易对', source.symbol || '') || '').trim().toUpperCase();
-    if (!symbol) return;
-    const side = (prompt('方向(多/空)', source.side || '') || '').trim();
-    if (side !== '多' && side !== '空') {
-        showToast('方向仅支持 多 或 空', 'error');
-        return;
-    }
-    const entryPrice = Number(prompt('开仓价', String(source.entryPrice ?? '')));
-    const exitPrice = Number(prompt('平仓价', String(source.exitPrice ?? '')));
-    const quantity = Number(prompt('数量(张)', String(source.quantity ?? '')));
-    const pnl = Number(prompt('盈亏(USDT)', String(source.pnl ?? '')));
-    const reason = (prompt('原因', source.reason || '') || '').trim();
-    if (!Number.isFinite(entryPrice) || !Number.isFinite(exitPrice) || !Number.isFinite(quantity) || !Number.isFinite(pnl)) {
-        showToast('价格/数量/盈亏必须是数字', 'error');
-        return;
-    }
-    saveHistoryEdit({ id, symbol, side, entryPrice, exitPrice, quantity, pnl, reason });
+    openHistoryEditModal(source);
 };
 
 function showLoading(show) {

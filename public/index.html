@@ -89,6 +89,35 @@
         </div>
     </div>
 
+    <div id="history-edit-modal" class="modal-mask">
+        <div class="modal-panel">
+            <h3>编辑交易记录</h3>
+            <div class="modal-grid">
+                <label>交易对</label>
+                <input id="history-edit-symbol" type="text" autocomplete="off">
+                <label>方向</label>
+                <select id="history-edit-side">
+                    <option value="多">多</option>
+                    <option value="空">空</option>
+                </select>
+                <label>开仓价</label>
+                <input id="history-edit-entry" type="number" step="0.0001">
+                <label>平仓价</label>
+                <input id="history-edit-exit" type="number" step="0.0001">
+                <label>数量(张)</label>
+                <input id="history-edit-qty" type="number" step="0.0001">
+                <label>盈亏(USDT)</label>
+                <input id="history-edit-pnl" type="number" step="0.01">
+                <label>原因</label>
+                <input id="history-edit-reason" type="text" autocomplete="off">
+            </div>
+            <div class="modal-actions">
+                <button id="history-edit-cancel">取消</button>
+                <button id="history-edit-save" class="primary">保存</button>
+            </div>
+        </div>
+    </div>
+
     <div class="loading-overlay" id="loading-overlay">
         <div class="spinner"></div>
     </div>
