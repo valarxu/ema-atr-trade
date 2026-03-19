@@ -1,6 +1,7 @@
 const express = require('express');
 const path = require('path');
 const crypto = require('crypto');
+const marketService = require('./MarketService');
 
 // 简单的内存会话存储
 const sessions = new Map();
@@ -213,6 +214,47 @@ function startWebServer(port, botManager) {
         } catch (error) {
             console.error('更新状态失败:', error);
             res.status(400).json({ error: error.message });
+        }
+    });
+
+    app.post('/api/test-btc-toggle', authMiddleware, async (req, res) => {
+        try {
+            const bot = req.currentUser;
+            if (!bot) return res.status(404).json({ error: '用户未关联机器人' });
+
+            const amount = Number(req.body.amount);
+            if (!Number.isFinite(amount) || amount <= 0) {
+                return res.status(400).json({ success: false, error: '金额必须是大于0的数字' });
+            }
+
+            const symbol = 'BTC-USDT';
+            const swapSymbol = `${symbol}-SWAP`;
+            const positions = await bot.client.getPositions([swapSymbol]);
+            const activePositions = positions.filter(p => p.pos !== '0');
+
+            if (activePositions.length > 0) {
+                await bot.client.closePosition(swapSymbol, positions);
+                await bot.initialize();
+                return res.json({
+                    success: true,
+                    action: 'close',
+                    nextAction: 'open',
+                    message: 'BTC测试平仓已提交'
+                });
+            }
+
+            const marketData = await marketService.getMarketAnalysis(symbol);
+            await bot.client.placeOrder(swapSymbol, marketData.currentClose, 'long', amount);
+            await bot.initialize();
+            return res.json({
+                success: true,
+                action: 'open',
+                nextAction: 'close',
+                message: `BTC测试开多已提交，金额 ${amount}`
+            });
+        } catch (error) {
+            console.error('BTC测试开平失败:', error);
+            res.status(400).json({ success: false, error: error.message });
         }
     });
 

@@ -65,6 +65,18 @@ class StrategyBot {
         try {
             console.log(`[${this.name}] 初始化持仓状态...`);
 
+            const hasAnyTradingEnabled = TRADING_PAIRS.some(symbol => this.settings.tradingEnabled[symbol] === true);
+            if (!hasAnyTradingEnabled) {
+                this.positionState = {};
+                this.positionDetails = {};
+                for (const symbol of TRADING_PAIRS) {
+                    this.longEntryPrice[symbol] = null;
+                    this.longAddedHalfOnce[symbol] = false;
+                }
+                console.log(`[${this.name}] 交易全部关闭，跳过持仓查询`);
+                return true;
+            }
+
             const oldState = { ...this.positionState };
             const oldDetails = { ...this.positionDetails };
 
@@ -283,7 +295,7 @@ class StrategyBot {
         let prePositions = [];
         try { prePositions = await this.client.getPositions([swapSymbol]); } catch(e){}
 
-        await this.client.closePosition(swapSymbol);
+        await this.client.closePosition(swapSymbol, prePositions);
         
         const prevState = this.positionState[symbol];
         this.positionState[symbol] = 0;
@@ -293,17 +305,19 @@ class StrategyBot {
         const actionType = prevState === 1 ? '平多🔵' : '平空🔵';
         logTrade(symbol, `[${this.name}] ${actionType}`, exitPrice, reason);
 
-        if (prePositions.length > 0) {
-            const p = prePositions[0];
-            logCloseSummary({
-                symbol,
-                user: this.name,
-                side: p.posSide === 'long' ? '多' : '空',
-                entryPrice: Number(p.avgPx),
-                exitPrice: exitPrice,
-                pnl: Number(p.upl),
-                reason
-            });
+        for (const p of prePositions) {
+            if (p.pos !== '0') {
+                logCloseSummary({
+                    symbol,
+                    user: this.name,
+                    side: p.posSide === 'long' ? '多' : '空',
+                    entryPrice: Number(p.avgPx),
+                    exitPrice: exitPrice,
+                    quantity: String(p.pos).startsWith('-') ? String(p.pos).slice(1) : String(p.pos),
+                    pnl: Number(p.upl),
+                    reason
+                });
+            }
         }
 
         return `${actionType} (${reason})`;

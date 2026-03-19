@@ -198,13 +198,35 @@ class OkxClient {
     }
 
     // 平仓
-    async closePosition(symbol, mgnMode = 'isolated') {
-        const orderData = {
-            instId: symbol,
-            mgnMode: mgnMode
-        };
-        console.log(`[${symbol}] 准备市价全平`);
-        return await this._request('POST', '/trade/close-position', orderData);
+    async closePosition(symbol, positions = null, tdMode = 'isolated') {
+        const targetPositions = Array.isArray(positions) ? positions : await this.getPositions([symbol]);
+        const activePositions = targetPositions.filter(p => p.pos !== '0');
+
+        if (activePositions.length === 0) {
+            console.log(`[${symbol}] 无可平仓位`);
+            return [];
+        }
+
+        const results = [];
+        for (const position of activePositions) {
+            const rawPos = String(position.pos);
+            const szStr = rawPos.startsWith('-') ? rawPos.slice(1) : rawPos;
+            const normalizedPosSide = position.posSide === 'long' || position.posSide === 'short'
+                ? position.posSide
+                : (Number(position.pos) >= 0 ? 'long' : 'short');
+            const orderData = {
+                instId: position.instId || symbol,
+                tdMode,
+                side: normalizedPosSide === 'long' ? 'sell' : 'buy',
+                ordType: 'market',
+                sz: szStr,
+                posSide: normalizedPosSide
+            };
+            console.log(`[${orderData.instId}] 准备平仓: ${orderData.posSide} ${orderData.sz}`);
+            const res = await this._request('POST', '/trade/order', orderData);
+            results.push(res);
+        }
+        return results;
     }
 
     // 获取持仓

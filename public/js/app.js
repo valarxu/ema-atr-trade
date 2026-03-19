@@ -2,6 +2,7 @@ let appState = null;
 let currentTargetUserId = null;
 let isAdminMode = false;
 let pnlChart = null;
+let btcTestNextAction = 'open';
 
 const container = document.getElementById('cards-container');
 const loadingOverlay = document.getElementById('loading-overlay');
@@ -17,6 +18,8 @@ const loginUser = document.getElementById('login-user');
 const loginPass = document.getElementById('login-pass');
 const loginSubmit = document.getElementById('login-submit');
 const loginError = document.getElementById('login-error');
+const btcTestAmount = document.getElementById('btc-test-amount');
+const btcTestToggleBtn = document.getElementById('btc-test-toggle');
 
 document.addEventListener('DOMContentLoaded', () => {
     checkAuth();
@@ -52,6 +55,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('enable-all-short').addEventListener('click', () => {
         if (confirm('确定恢复所有交易对的空头信号状态吗？')) updateSetting('resetAllShortSignalState', {});
     });
+    btcTestToggleBtn.addEventListener('click', () => runBtcTestToggle());
 
     document.getElementById('logout-btn').addEventListener('click', () => {
         if (confirm('确定要登出吗？')) logout();
@@ -167,6 +171,7 @@ async function fetchState() {
         }
 
         render();
+        syncBtcTestButtonByState();
     } catch (err) {
         showToast(`加载状态失败: ${err.message}`, 'error');
     } finally {
@@ -208,6 +213,41 @@ async function fetchHistory() {
         renderHistoryChart(history);
     } catch (e) {
         showToast('加载历史失败', 'error');
+    } finally {
+        showLoading(false);
+    }
+}
+
+function syncBtcTestButtonByState() {
+    const btcState = appState && appState.positionState ? Number(appState.positionState['BTC-USDT'] || 0) : 0;
+    btcTestNextAction = btcState === 0 ? 'open' : 'close';
+    btcTestToggleBtn.textContent = btcTestNextAction === 'open' ? 'BTC测试开多' : 'BTC测试平仓';
+}
+
+async function runBtcTestToggle() {
+    const amount = Number(btcTestAmount.value);
+    if (!Number.isFinite(amount) || amount <= 0) {
+        showToast('请输入有效的测试金额', 'error');
+        return;
+    }
+    showLoading(true);
+    try {
+        const bodyData = { amount };
+        if (isAdminMode && currentTargetUserId) bodyData.userId = currentTargetUserId;
+        const res = await fetch('/api/test-btc-toggle', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+            body: JSON.stringify(bodyData)
+        });
+        if (res.status === 401) return logout();
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || 'BTC测试失败');
+        btcTestNextAction = data.nextAction || (data.action === 'open' ? 'close' : 'open');
+        btcTestToggleBtn.textContent = btcTestNextAction === 'open' ? 'BTC测试开多' : 'BTC测试平仓';
+        showToast(data.message || 'BTC测试执行成功', 'success');
+        await fetchState();
+    } catch (err) {
+        showToast(`BTC测试失败: ${err.message}`, 'error');
     } finally {
         showLoading(false);
     }
