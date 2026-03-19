@@ -64,6 +64,12 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('enable-all-short').addEventListener('click', () => {
         if (confirm('确定恢复所有交易对的空头信号状态吗？')) updateSetting('resetAllShortSignalState', {});
     });
+    document.getElementById('open-all-positions').addEventListener('click', () => {
+        if (confirm('确定按已启用交易对执行一键全开吗？')) window.manualOpenAll();
+    });
+    document.getElementById('close-all-positions').addEventListener('click', () => {
+        if (confirm('确定按已启用交易对执行一键全平吗？')) window.manualCloseAll();
+    });
 
     document.getElementById('logout-btn').addEventListener('click', () => {
         if (confirm('确定要登出吗？')) logout();
@@ -283,6 +289,28 @@ async function saveHistoryEdit(payload) {
     }
 }
 
+async function requestManualAction(url, payload, successText) {
+    showLoading(true);
+    try {
+        const bodyData = { ...payload };
+        if (isAdminMode && currentTargetUserId) bodyData.userId = currentTargetUserId;
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+            body: JSON.stringify(bodyData)
+        });
+        if (res.status === 401) return logout();
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || '执行失败');
+        showToast(data.message || successText || '执行成功', 'success');
+        await fetchState();
+    } catch (err) {
+        showToast(`执行失败: ${err.message}`, 'error');
+    } finally {
+        showLoading(false);
+    }
+}
+
 function openHistoryEditModal(source) {
     editingHistoryId = source.id;
     historyEditSymbol.value = source.symbol || '';
@@ -436,6 +464,8 @@ function createCard(symbol) {
             <button class="small primary" onclick="savePair('${symbol}')">保存</button>
             <button class="small" onclick="resetAmount('${symbol}')">重置金额</button>
             <button class="small" onclick="resetShortSignalState('${symbol}')">恢复空头信号</button>
+            <button class="small primary" onclick="manualOpenPair('${symbol}')" ${enabled ? '' : 'disabled'}>开仓</button>
+            <button class="small danger" onclick="manualClosePair('${symbol}')" ${enabled ? '' : 'disabled'}>平仓</button>
         </div>
     `;
     return card;
@@ -456,6 +486,10 @@ window.savePair = (symbol) => {
 
 window.resetAmount = (symbol) => updateSetting('resetPairAmount', { symbol });
 window.resetShortSignalState = (symbol) => updateSetting('resetPairShortSignalState', { symbol });
+window.manualOpenPair = (symbol) => requestManualAction('/api/position/open', { symbol }, `${symbol} 开仓已提交`);
+window.manualClosePair = (symbol) => requestManualAction('/api/position/close', { symbol }, `${symbol} 平仓已提交`);
+window.manualOpenAll = () => requestManualAction('/api/position/open-all', {}, '一键全开已提交');
+window.manualCloseAll = () => requestManualAction('/api/position/close-all', {}, '一键全平已提交');
 window.editHistory = (id) => {
     if (!id) return;
     const source = lastHistoryData.find(h => h.id === id);

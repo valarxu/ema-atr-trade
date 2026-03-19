@@ -1,6 +1,7 @@
 const express = require('express');
 const path = require('path');
 const crypto = require('crypto');
+const marketService = require('./MarketService');
 
 // 简单的内存会话存储
 const sessions = new Map();
@@ -255,6 +256,113 @@ function startWebServer(port, botManager) {
         } catch (error) {
             console.error('更新状态失败:', error);
             res.status(400).json({ error: error.message });
+        }
+    });
+
+    app.post('/api/position/open', authMiddleware, async (req, res) => {
+        try {
+            const { TRADING_PAIRS } = require('../utils/constants.js');
+            const bot = req.currentUser;
+            if (!bot) return res.status(404).json({ success: false, error: '用户未关联机器人' });
+            const symbol = String(req.body.symbol || '').trim().toUpperCase();
+            if (!TRADING_PAIRS.includes(symbol)) return res.status(400).json({ success: false, error: '无效交易对' });
+            if (!bot.settings.tradingEnabled[symbol]) return res.status(400).json({ success: false, error: `${symbol} 未启用交易` });
+            const swapSymbol = `${symbol}-SWAP`;
+            const positions = await bot.client.getPositions([swapSymbol]);
+            if (positions.some(p => p.pos !== '0')) return res.status(400).json({ success: false, error: `${symbol} 已有持仓，请先平仓` });
+            const marketData = await marketService.getMarketAnalysis(symbol);
+            const amount = Number(bot.baseAmounts[swapSymbol] || 0) * Number(bot.settings.pairMultipliers[symbol] || 1);
+            if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({ success: false, error: `${symbol} 开仓金额无效` });
+            await bot.client.placeOrder(swapSymbol, marketData.currentClose, 'long', amount);
+            await bot.initialize();
+            res.json({ success: true, message: `${symbol} 开仓已提交` });
+        } catch (error) {
+            console.error('手动开仓失败:', error);
+            res.status(400).json({ success: false, error: error.message });
+        }
+    });
+
+    app.post('/api/position/close', authMiddleware, async (req, res) => {
+        try {
+            const { TRADING_PAIRS } = require('../utils/constants.js');
+            const bot = req.currentUser;
+            if (!bot) return res.status(404).json({ success: false, error: '用户未关联机器人' });
+            const symbol = String(req.body.symbol || '').trim().toUpperCase();
+            if (!TRADING_PAIRS.includes(symbol)) return res.status(400).json({ success: false, error: '无效交易对' });
+            if (!bot.settings.tradingEnabled[symbol]) return res.status(400).json({ success: false, error: `${symbol} 未启用交易` });
+            const swapSymbol = `${symbol}-SWAP`;
+            const positions = await bot.client.getPositions([swapSymbol]);
+            if (!positions.some(p => p.pos !== '0')) return res.status(400).json({ success: false, error: `${symbol} 当前无持仓` });
+            await bot.client.closePosition(swapSymbol, positions);
+            await bot.initialize();
+            res.json({ success: true, message: `${symbol} 平仓已提交` });
+        } catch (error) {
+            console.error('手动平仓失败:', error);
+            res.status(400).json({ success: false, error: error.message });
+        }
+    });
+
+    app.post('/api/position/open-all', authMiddleware, async (req, res) => {
+        try {
+            const { TRADING_PAIRS } = require('../utils/constants.js');
+            const bot = req.currentUser;
+            if (!bot) return res.status(404).json({ success: false, error: '用户未关联机器人' });
+            const enabledSymbols = TRADING_PAIRS.filter(symbol => !!bot.settings.tradingEnabled[symbol]);
+            if (enabledSymbols.length === 0) return res.status(400).json({ success: false, error: '没有已启用的交易对' });
+
+            const opened = [];
+            const skipped = [];
+            for (const symbol of enabledSymbols) {
+                const swapSymbol = `${symbol}-SWAP`;
+                const positions = await bot.client.getPositions([swapSymbol]);
+                if (positions.some(p => p.pos !== '0')) {
+                    skipped.push(`${symbol}:已有持仓`);
+                    continue;
+                }
+                const marketData = await marketService.getMarketAnalysis(symbol);
+                const amount = Number(bot.baseAmounts[swapSymbol] || 0) * Number(bot.settings.pairMultipliers[symbol] || 1);
+                if (!Number.isFinite(amount) || amount <= 0) {
+                    skipped.push(`${symbol}:金额无效`);
+                    continue;
+                }
+                await bot.client.placeOrder(swapSymbol, marketData.currentClose, 'long', amount);
+                opened.push(symbol);
+            }
+
+            await bot.initialize();
+            res.json({ success: true, message: `全开完成，成功${opened.length}个，跳过${skipped.length}个`, opened, skipped });
+        } catch (error) {
+            console.error('一键全开失败:', error);
+            res.status(400).json({ success: false, error: error.message });
+        }
+    });
+
+    app.post('/api/position/close-all', authMiddleware, async (req, res) => {
+        try {
+            const { TRADING_PAIRS } = require('../utils/constants.js');
+            const bot = req.currentUser;
+            if (!bot) return res.status(404).json({ success: false, error: '用户未关联机器人' });
+            const enabledSymbols = TRADING_PAIRS.filter(symbol => !!bot.settings.tradingEnabled[symbol]);
+            if (enabledSymbols.length === 0) return res.status(400).json({ success: false, error: '没有已启用的交易对' });
+
+            const closed = [];
+            const skipped = [];
+            for (const symbol of enabledSymbols) {
+                const swapSymbol = `${symbol}-SWAP`;
+                const positions = await bot.client.getPositions([swapSymbol]);
+                if (!positions.some(p => p.pos !== '0')) {
+                    skipped.push(`${symbol}:无持仓`);
+                    continue;
+                }
+                await bot.client.closePosition(swapSymbol, positions);
+                closed.push(symbol);
+            }
+
+            await bot.initialize();
+            res.json({ success: true, message: `全平完成，成功${closed.length}个，跳过${skipped.length}个`, closed, skipped });
+        } catch (error) {
+            console.error('一键全平失败:', error);
+            res.status(400).json({ success: false, error: error.message });
         }
     });
 
