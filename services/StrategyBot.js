@@ -125,15 +125,36 @@ class StrategyBot {
                         if (detail) {
                             const side = oldState[symbol] === 1 ? '多' : '空';
                             const entryPrice = detail.avgPx;
-                            const estimatedExitPrice = oldState[symbol] === 1 ? entryPrice * 0.9 : entryPrice * 1.1;
+                            let estimatedExitPrice = oldState[symbol] === 1 ? entryPrice * 0.9 : entryPrice * 1.1;
                             const quantity = Math.abs(parseFloat(detail.pos));
                             const instrumentInfo = this.client.getInstrumentInfo(`${symbol}-SWAP`);
                             const ctVal = instrumentInfo ? Number(instrumentInfo.ctVal) : 1;
-                            const notionalUsdt = entryPrice * quantity * ctVal;
-                            const pnl = -0.1 * notionalUsdt;
+                            let pnl = -0.1 * (entryPrice * quantity * ctVal);
 
-                            console.log(`[${this.name}] ⚠️ 检测到仓位异常消失(可能强平): ${symbol} (${side})`);
+                            console.log(`[${this.name}] ⚠️ 检测到仓位异常消失: ${symbol} (${side})，正在查询最近成交记录以获取准确数据...`);
                             
+                            try {
+                                const fills = await this.client.getFills('SWAP', `${symbol}-SWAP`);
+                                // 查找最近一次平仓该方向的成交记录
+                                // side为多，说明当时是多头，平仓动作是sell；side为空，说明当时是空头，平仓动作是buy
+                                const closeAction = oldState[symbol] === 1 ? 'sell' : 'buy';
+                                const recentCloseFill = fills.find(f => f.side === closeAction);
+                                
+                                if (recentCloseFill) {
+                                    estimatedExitPrice = parseFloat(recentCloseFill.fillPx);
+                                    // pnl 计算: (平仓价 - 开仓价) * 数量 * 面值 (多头)
+                                    // 空头: (开仓价 - 平仓价) * 数量 * 面值
+                                    pnl = oldState[symbol] === 1 
+                                        ? (estimatedExitPrice - entryPrice) * quantity * ctVal
+                                        : (entryPrice - estimatedExitPrice) * quantity * ctVal;
+                                    console.log(`[${this.name}] ✅ 成功获取 ${symbol} 真实平仓价: ${estimatedExitPrice}, 真实盈亏: ${pnl.toFixed(4)}`);
+                                } else {
+                                    console.log(`[${this.name}] ⚠️ 未找到 ${symbol} 最近的平仓成交记录，使用估算数据。`);
+                                }
+                            } catch (err) {
+                                console.error(`[${this.name}] ❌ 获取 ${symbol} 历史成交记录失败:`, err.message);
+                            }
+
                             logCloseSummary({
                                 symbol,
                                 user: this.name,
@@ -142,7 +163,7 @@ class StrategyBot {
                                 exitPrice: estimatedExitPrice,
                                 quantity,
                                 pnl,
-                                reason: '异常平仓(强平/止损)'
+                                reason: '异常平仓(外部/强平)'
                             });
                         }
                     }

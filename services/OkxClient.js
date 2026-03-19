@@ -245,6 +245,18 @@ class OkxClient {
         }
         return res.data;
     }
+
+    // 获取历史成交记录
+    async getFills(instType = 'SWAP', instId = '') {
+        const params = { instType };
+        if (instId) {
+            params.instId = instId;
+        }
+        // OKX /api/v5/trade/fills 返回最近的成交明细
+        const res = await this._request('GET', '/trade/fills', null, params);
+        if (res.code !== '0') throw new Error(`获取历史成交失败: ${res.msg}`);
+        return res.data;
+    }
 }
 
 module.exports = OkxClient;
