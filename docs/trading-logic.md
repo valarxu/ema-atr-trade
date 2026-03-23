@@ -1,75 +1,64 @@
-# 交易逻辑说明
+# 交易策略与逻辑说明
 
-本文档详细说明当前系统的开仓、平仓与加仓规则，以及相关指标与特殊模式。所有规则均以 4H 周期数据为基础，核心指标为 EMA120 与 ATR60。
+本文档详细说明当前多用户版系统的开仓、平仓与加仓规则，以及相关指标与特殊模式。所有规则均以 4H 周期数据为基础，核心指标为 EMA120 与 ATR60。
 
 ## 指标与基础计算
-- EMA120：以历史收盘价计算的 120 周期指数移动平均
-- ATR60：以历史高低收盘价计算的 60 周期平均真实波幅
-- 价格偏离度 priceDistance：以 ATR 为单位表示价格与 EMA 的距离  
-  计算公式：priceDistance = (previousClose - EMA120) / ATR60  
-  位置参考：[index.js:117-121](file:///d:/my_programs/Trade/ema-atr-trade/index.js#L117-L121)
-- 关键参数：
-  - atrMultiplier = 1.5（触发开仓的最小偏离倍数）
-  - shortTakeProfitAtrMultiplier = 5.0（做空的止盈偏离倍数）
+- **数据源**：OKX 4小时（4H）K线数据。通过 `MarketService.js` 统一抓取，避免多用户重复请求。
+- **EMA120**：以历史收盘价计算的 120 周期指数移动平均（Exponential Moving Average）。
+- **ATR60**：以历史高低收盘价计算的 60 周期平均真实波幅（Average True Range）。
+- **价格偏离度 (priceDistance)**：以 ATR 为单位表示价格与 EMA 的距离。
+  - 计算公式：`priceDistance = (previousClose - EMA120) / ATR60`
+- **核心参数**（定义于 `services/StrategyBot.js`）：
+  - `ATR_MULTIPLIER = 1.5`：触发开仓的最小偏离倍数。
+  - `SHORT_TAKE_PROFIT_ATR_MULTIPLIER = 5.0`：做空的止盈偏离倍数。
 
 ## 开仓规则
-- 开多
-  - 条件：previousClose > EMA120 且 priceDistance > atrMultiplier  
-    位置参考：[index.js:151-157](file:///d:/my_programs/Trade/ema-atr-trade/index.js#L151-L157)
-  - 动作：以设定金额下多仓；记录开仓价并重置加仓标记
-- 开空
-  - 条件：previousClose < EMA120 且 priceDistance < -atrMultiplier  
-  - 额外限制：未开启“只做多”模式，且不处于“忽略做空信号”状态  
-    位置参考：[index.js:158-164](file:///d:/my_programs/Trade/ema-atr-trade/index.js#L158-L164)
-  - 动作：以设定金额下空仓
+- **开多 (Long)**
+  - 条件：`previousClose > historicalEMA120` 且 `priceDistance > 1.5`
+  - 动作：以设定金额（基础金额 × 乘数）下多仓；记录开仓价，并重置加仓标记（`longAddedHalfOnce = false`）。
+- **开空 (Short)**
+  - 条件：`previousClose < historicalEMA120` 且 `priceDistance < -1.5`
+  - 额外限制：当前交易对的交易模式为 `both`（双向），且空头信号状态为 `normal`（正常）。
+  - 动作：以设定金额下空仓。
 
 ## 加仓规则（仅多头）
-- 触发条件：持有多仓，最新价 currentClose > longEntryPrice + 5 × ATR60，且尚未加过仓  
-  位置参考：[index.js:166-174](file:///d:/my_programs/Trade/ema-atr-trade/index.js#L166-L174)
-- 加仓规模：该品种设定仓位金额的一半
-- 状态维护：首次加仓后标记 longAddedHalfOnce 为已加，平仓后重置
+- **触发条件**：当前持有多仓，最新价 `currentClose > longEntryPrice + 5 × ATR60`，且尚未进行过加仓（`longAddedHalfOnce === false`）。
+- **加仓规模**：按该品种设定的初始开仓金额追加一次（相当于仓位翻倍）。
+- **状态维护**：首次加仓后标记 `longAddedHalfOnce = true`，平仓后该标记会自动重置。
 
 ## 平仓规则
-- 平多（趋势反转）
-  - 条件：previousClose < EMA120  
-  - 动作：市价平多；写入统一摘要日志（包含开仓价、平仓价、数量、盈亏、原因）  
-    位置参考：[index.js:166-174](file:///d:/my_programs/Trade/ema-atr-trade/index.js#L166-L174)
-- 平空（原始趋势反转）
-  - 条件：previousClose > EMA120  
-  - 动作：市价平空；写入统一摘要日志  
-    位置参考：[index.js:242-260](file:///d:/my_programs/Trade/ema-atr-trade/index.js#L242-L260)
-- 平空（做空止盈）
-  - 条件：priceDistance < -shortTakeProfitAtrMultiplier  
-  - 动作：市价平空；写入统一摘要日志  
-    位置参考：[index.js:214-232](file:///d:/my_programs/Trade/ema-atr-trade/index.js#L214-L232)
+- **平多（趋势反转）**
+  - 条件：`previousClose < historicalEMA120`
+  - 动作：市价平掉所有多头仓位；写入统一摘要日志。
+- **平空（原始趋势反转）**
+  - 条件：`previousClose > historicalEMA120`
+  - 动作：市价平掉所有空头仓位；写入统一摘要日志。
+- **平空（做空止盈）**
+  - 条件：`priceDistance < -5.0`（价格跌破EMA下方超过5个ATR）
+  - 动作：市价平空，并将该交易对的空头信号状态临时设置为 `ignored_temporarily`，防止在低位反复频繁开空。
+- **平空（模式切换强制平空）**
+  - 条件：持有空仓但交易模式被切换为 `long_only`（只做多）。
+  - 动作：关闭当前空仓。
 
-## 平仓后的复评估
-- 在平仓后，会立即重新抓取最新 K 线，再次评估是否满足开仓条件并执行（例如平空后价格上穿 EMA 满足开多）  
-  位置参考：  
-  - 平多后评估开空：[index.js:174-189](file:///d:/my_programs/Trade/ema-atr-trade/index.js#L174-L189)  
-  - 平空后评估开多（两种场景）：[index.js:252-261](file:///d:/my_programs/Trade/ema-atr-trade/index.js#L252-L261), [index.js:306-311](file:///d:/my_programs/Trade/ema-atr-trade/index.js#L306-L311)
+## 平仓后的反手评估
+在执行平仓动作后，系统会调用 `_reevaluateAfterClose` 方法，立即重新评估是否满足反方向的开仓条件。
+例如：平多后，如果当时的价格已经满足开空条件，系统会紧接着自动开空。
 
 ## 特殊模式与信号
-- 交易模式（tradeMode）
-  - `both`：允许开多和开空
-  - `long_only`：只允许开多；若当前持有空仓，将在下一轮策略中触发平空
-- 空头信号状态（shortSignalState）
-  - `normal`：允许按策略触发开空
-  - `ignored_temporarily`：临时忽略开空；当价格重新回到 EMA 上方时自动恢复为 `normal`
+- **交易模式（tradeMode）**
+  - `both`（双向）：允许开多和开空。
+  - `long_only`（只做多）：只允许开多；若当前持有空仓，将在下一轮策略执行中触发平空。
+- **空头信号状态（shortSignalState）**
+  - `normal`（正常）：允许按策略触发开空。
+  - `ignored_temporarily`（临时忽略）：临时忽略开空信号（通常在做空止盈后触发）。当价格重新回升到 EMA120 上方（`previousClose > historicalEMA120`）时，系统会自动将其恢复为 `normal`。
+
+## 资金与仓位管理
+- **基础开仓金额**：定义在 `utils/constants.js` 的 `POSITION_USDT` 中（例如 BTC 为 1500U，ETH 为 2000U 等）。
+- **用户乘数 (pairMultiplier)**：针对多用户架构，每个用户可以配置不同的乘数（默认为 1.0）。
+- **实际开仓金额**：`实际金额 = 基础开仓金额 × 乘数`。系统会根据实际金额和当前市价自动计算合约张数。
 
 ## 日志与报告
-- 逐币种交易日志：logs/trades_<symbol>_YYYY_MM.txt（每次开平/加仓都会记录）  
-  开多/开空/平多/平空位置参考：  
-  - 开多：[index.js:174](file:///d:/my_programs/Trade/ema-atr-trade/index.js#L174)  
-  - 开空：[index.js:180](file:///d:/my_programs/Trade/ema-atr-trade/index.js#L180)  
-  - 平多：[index.js:188](file:///d:/my_programs/Trade/ema-atr-trade/index.js#L188)  
-  - 平空（多场景）：[index.js:239](file:///d:/my_programs/Trade/ema-atr-trade/index.js#L239), [index.js:277](file:///d:/my_programs/Trade/ema-atr-trade/index.js#L277), [index.js:319](file:///d:/my_programs/Trade/ema-atr-trade/index.js#L319)
-- 统一摘要日志：logs/trades_summary_YYYY_MM.txt（平仓时写入统一格式摘要，含开仓价、平仓价、数量、盈亏、原因）  
-  摘要写入位置参考：  
-  - 平多摘要：[index.js:166-174](file:///d:/my_programs/Trade/ema-atr-trade/index.js#L166-L174)  
-  - 平空摘要（只做多强制平空/做空止盈/EMA反转）：[index.js:195-209](file:///d:/my_programs/Trade/ema-atr-trade/index.js#L195-L209), [index.js:214-232](file:///d:/my_programs/Trade/ema-atr-trade/index.js#L214-L232), [index.js:242-260](file:///d:/my_programs/Trade/ema-atr-trade/index.js#L242-L260)
-
-## 备注
-- 所有下单均使用逐仓模式、市场价执行，张数按设定的 USDT 金额与合约面值自动计算
-- 报告中使用 priceDistance 与当前持仓状态，辅助监控与操作确认  
-  报告构建位置参考：[index.js:300-303](file:///d:/my_programs/Trade/ema-atr-trade/index.js#L300-L303)
+- **逐币种交易日志**：`logs/trades_<symbol>_YYYY_MM.txt`（每次开仓、平仓、加仓动作都会详细记录）。
+- **统一摘要日志**：`logs/trades_summary_YYYY_MM.txt`（仅在平仓时写入统一格式的摘要，包含开仓价、平仓价、数量、盈亏、平仓原因）。
+- **结构化历史数据**：`data/trades_history.json`（保存交易历史用于 Web 端的展示与统计）。
+- **定时监控**：系统通过 `index.js` 中的定时任务每4小时执行一次策略，并在 Telegram 发送包含持仓状态和当前偏离度的监控报告。
