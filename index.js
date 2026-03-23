@@ -16,14 +16,9 @@ function normalizeSymbol(input) {
     return null;
 }
 
-function getPrimaryBot(botManager) {
-    const bots = botManager.getAllBots();
-    return bots.length > 0 ? bots[0] : null;
-}
 
-function createTelegramCommandHandler(botManager) {
+function createTelegramCommandHandler(bot) {
     return (text) => {
-        const bot = getPrimaryBot(botManager);
         if (!bot) {
             return '❌ 当前没有可控制的机器人实例';
         }
@@ -271,7 +266,13 @@ async function startup() {
     startWebServer(3020, botManager);
 
     // 3. 启动Telegram命令控制
-    setupTelegramBot(createTelegramCommandHandler(botManager));
+    for (const bot of botManager.getAllBots()) {
+        const token = bot.tgBotToken || process.env.TELEGRAM_BOT_TOKEN;
+        const chatId = bot.tgChatId || process.env.TELEGRAM_CHAT_ID;
+        if (token && chatId) {
+            setupTelegramBot(token, chatId, createTelegramCommandHandler(bot));
+        }
+    }
 
     // 4. 启动时仅同步持仓并发送一次持仓快照，不执行交易
     await botManager.syncPositions(true, '启动持仓同步');

@@ -17,6 +17,7 @@ class StrategyBot {
         this.client = new OkxClient(userConfig.okx);
         
         this.tgChatId = userConfig.telegram ? userConfig.telegram.chatId : null;
+        this.tgBotToken = userConfig.telegram ? userConfig.telegram.botToken : null;
         
         this.settings = userConfig.settings || {};
         this.settings.tradingEnabled = this.settings.tradingEnabled || {};
@@ -211,7 +212,7 @@ class StrategyBot {
     async notify(message) {
         if (this.tgChatId) {
             const prefix = `👤 <b>${this.name}</b>\n`;
-            await sendToTelegram(prefix + message, this.tgChatId);
+            await sendToTelegram(prefix + message, this.tgBotToken, this.tgChatId);
         }
     }
 
