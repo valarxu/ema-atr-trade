@@ -263,27 +263,27 @@ class StrategyBot {
                 console.log(`[${this.name}] ${symbol} 价格回EMA上方，空头信号恢复为正常`);
             }
 
-            let tradeAction = '无';
+            let tradeActionResult = '无';
             const posState = this.positionState[symbol] || 0;
 
             // 4. 策略状态机
             if (posState === 0) {
-                tradeAction = await this._attemptOpenPosition(marketData, 'both');
+                tradeActionResult = await this._attemptOpenPosition(marketData, 'both');
             } 
             else if (posState === 1) {
                 if (previousClose < historicalEMA120) {
-                    tradeAction = await this._executeClosePosition(symbol, previousClose, '价格跌破EMA');
+                    tradeActionResult = await this._executeClosePosition(symbol, previousClose, '价格跌破EMA');
                     const reAction = await this._reevaluateAfterClose(symbol, 'checkShort', '平多后');
-                    if (reAction) tradeAction = reAction;
+                    if (reAction) tradeActionResult.tradeAction += ` -> ${reAction}`;
                 } else {
-                    tradeAction = await this._checkAddPosition(marketData);
+                    tradeActionResult = await this._checkAddPosition(marketData);
                 }
             } 
             else if (posState === -1) {
-                tradeAction = await this._checkCloseShort(marketData);
+                tradeActionResult = await this._checkCloseShort(marketData);
             }
 
-            return this._buildResult(symbol, marketData, tradeAction);
+            return this._buildResult(symbol, marketData, tradeActionResult);
 
         } catch (error) {
             console.error(`[${this.name}] 处理${symbol}出错: ${error.message}`);
@@ -291,7 +291,27 @@ class StrategyBot {
         }
     }
 
+    _normalizeActionResult(action) {
+        if (action && typeof action === 'object' && !Array.isArray(action)) {
+            return {
+                tradeAction: action.tradeAction || '无',
+                closeSummaries: Array.isArray(action.closeSummaries) ? action.closeSummaries : []
+            };
+        }
+
+        return {
+            tradeAction: action || '无',
+            closeSummaries: []
+        };
+    }
+
+    _formatCloseSummary(summary) {
+        const pnlText = `${summary.pnl >= 0 ? '+' : ''}${summary.pnl.toFixed(2)}U`;
+        return `${summary.side} | 开仓 ${summary.entryPrice.toFixed(4)} -> 平仓 ${summary.exitPrice.toFixed(4)} | 数量 ${summary.quantity} | 收益 ${pnlText}`;
+    }
+
     _buildResult(symbol, marketData, action) {
+        const normalizedAction = this._normalizeActionResult(action);
         return {
             symbol,
             user: this.name,
@@ -303,7 +323,8 @@ class StrategyBot {
             shortSignalState: this.settings.shortSignalState[symbol],
             pairMultiplier: this.settings.pairMultipliers[symbol] || 1,
             positionDetail: this.positionDetails[symbol] || null,
-            tradeAction: action
+            tradeAction: normalizedAction.tradeAction,
+            closeSummaries: normalizedAction.closeSummaries
         };
     }
 
@@ -359,10 +380,11 @@ class StrategyBot {
         
         const actionType = prevState === 1 ? '平多🔵' : '平空🔵';
         logTrade(symbol, `[${this.name}] ${actionType}`, exitPrice, reason);
+        const closeSummaries = [];
 
         for (const p of prePositions) {
             if (p.pos !== '0') {
-                logCloseSummary({
+                const closeSummary = {
                     symbol,
                     user: this.name,
                     side: p.posSide === 'long' ? '多' : '空',
@@ -371,11 +393,16 @@ class StrategyBot {
                     quantity: String(p.pos).startsWith('-') ? String(p.pos).slice(1) : String(p.pos),
                     pnl: Number(p.upl),
                     reason
-                });
+                };
+                logCloseSummary(closeSummary);
+                closeSummaries.push(this._formatCloseSummary(closeSummary));
             }
         }
 
-        return `${actionType} (${reason})`;
+        return {
+            tradeAction: `${actionType} (${reason})`,
+            closeSummaries
+        };
     }
 
     async _checkAddPosition(marketData) {
@@ -418,9 +445,9 @@ class StrategyBot {
         }
 
         if (shouldClose) {
-            let action = await this._executeClosePosition(symbol, previousClose, reason);
+            const action = await this._executeClosePosition(symbol, previousClose, reason);
             const reAction = await this._reevaluateAfterClose(symbol, nextCheck);
-            if (reAction) action += ` -> ${reAction}`;
+            if (reAction) action.tradeAction += ` -> ${reAction}`;
             return action;
         }
         return '无';

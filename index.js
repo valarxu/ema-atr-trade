@@ -203,9 +203,13 @@ const botManager = {
             for (const symbol of TRADING_PAIRS) {
                 try {
                     const result = await bot.processSymbol(symbol);
+                    const closeSummaryLine = result.closeSummaries && result.closeSummaries.length > 0
+                        ? `平仓结果: ${result.closeSummaries.join('；')}\n`
+                        : '';
                     const coinMessage = `<b>🔸 ${symbol.replace('-USDT', '')} (${result.currentClose.toFixed(2)}) | 偏离: ${result.priceDistance.toFixed(2)}</b>\n` +
                         `模式: ${result.tradeMode === 'long_only' ? '只做多' : '双向'} | 空头信号: ${result.shortSignalState === 'ignored_temporarily' ? '临时忽略' : '正常'}\n` +
-                        `操作: ${result.tradeAction || '无'}\n`;
+                        `操作: ${result.tradeAction || '无'}\n` +
+                        closeSummaryLine;
                     
                     monitorSection += coinMessage;
                 } catch (error) {
